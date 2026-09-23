@@ -1,3 +1,4 @@
+
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
@@ -7,9 +8,10 @@
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
 // @match        https://yeyak.gys.or.kr/fmcs/27*
+// @updateURL    https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys.user.js
+// @downloadURL  https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys.user.js
 // @grant        none
 // ==/UserScript==
-
 (function() {
     'use strict';
 

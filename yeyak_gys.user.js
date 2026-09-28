@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      8.4
-// @description  파이어폭스 첫 번째 링크/클릭 예약 실패 방지 (세션쿠키 보장 및 자동 1회 재시도 적용)
+// @version      8.5
+// @description  GM_xmlhttpRequest 적용으로 모바일 파이어폭스 불러오기 오류 및 세션 차단 완전 해결
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -11,6 +11,7 @@
 // @downloadURL  https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys.user.js
 // @grant        window.close
 // @grant        unsafeWindow
+// @grant        GM_xmlhttpRequest
 // ==/UserScript==
 (function() {
     'use strict';
@@ -185,7 +186,7 @@
             document.body.removeChild(form);
         }
 
-        // 💡 파이어폭스 세션 안정화 및 1회 자동 재시도 적용 함수
+        // 💡 모바일 파이어폭스 완벽 지원을 위한 GM_xmlhttpRequest / fetch 하이브리드 요청 함수
         function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount) {
             if (typeof isAutoLink === 'undefined') isAutoLink = false;
             if (typeof retryCount === 'undefined') retryCount = 0;
@@ -201,72 +202,82 @@
                 }
 
                 var member_number = typeof win.MEM_NO !== 'undefined' ? win.MEM_NO : '';
+                var targetApiUrl = "/rest/dailyuse/set_ticket_resve?company_code=" + company_cd +
+                                   "&program_code=" + target_program_code +
+                                   "&part_code=03" +
+                                   "&resve_date=" + resve_date +
+                                   "&time_seq=" + time_seq +
+                                   "&mem_no=" + member_number +
+                                   "&user_cnt=1&_=" + Date.now();
 
-                const $ = win.jQuery || win.$;
-                if (!$) {
-                    alert('페이지 스크립트를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
-                    resolve(false);
-                    return;
+                function handleSuccessResponse(data) {
+                    var result_cd = data.result_code;
+
+                    if (result_cd != 0 && retryCount < 2) {
+                        console.log('[Quick Auto] 첫 결과 코드 실패 (' + data.result_message + ') -> 300ms 후 자동 재시도 (' + (retryCount + 1) + '/2)');
+                        setTimeout(function() {
+                            custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
+                        }, 300);
+                        return;
+                    }
+
+                    if (result_cd != 0) {
+                        alert(data.result_message || '예약에 실패했습니다.');
+                        resolve(false);
+                        return;
+                    }
+
+                    var targetUrl = '/fmcs/102?action=write&comcd=' + company_cd + '&resve_no=' + data.r_num + '&from_panel=true';
+
+                    if (isAutoLink) {
+                        window.location.href = targetUrl;
+                    } else {
+                        openPaymentInNewTab(targetUrl);
+                    }
+                    
+                    resolve(true);
                 }
 
-                $.ajax({
-                    url: "/rest/dailyuse/set_ticket_resve",
-                    data: {
-                        company_code: company_cd,
-                        program_code: target_program_code,
-                        part_code: "03",
-                        resve_date: resve_date,
-                        time_seq: time_seq,
-                        mem_no: member_number,
-                        user_cnt: 1,
-                        _: Date.now()
-                    },
-                    method: 'GET',
-                    cache: false,
-                    dataType: 'json',
-                    xhrFields: {
-                        withCredentials: true // 파이어폭스 세션 쿠키 강제 전송
-                    },
-                    error: function(xhr, status, error) {
-                        if (retryCount < 1) {
-                            console.log('[Quick Auto] 첫 진입 실패 감지 -> 300ms 후 자동 재시도');
-                            setTimeout(function() {
-                                custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
-                            }, 300);
-                        } else {
-                            alert('예약 요청 중 오류가 발생했습니다: ' + error);
-                            resolve(false);
-                        }
-                    },
-                    success: function(data) {
-                        var result_cd = data.result_code;
-
-                        // 첫 번째 연결 지연으로 실패 시 1회 자동 재시도
-                        if (result_cd != 0 && retryCount < 1) {
-                            console.log('[Quick Auto] 첫 결과 코드 실패 (' + data.result_message + ') -> 300ms 후 자동 재시도');
-                            setTimeout(function() {
-                                custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
-                            }, 300);
-                            return;
-                        }
-
-                        if (result_cd != 0) {
-                            alert(data.result_message || '예약에 실패했습니다.');
-                            resolve(false);
-                            return;
-                        }
-
-                        var targetUrl = '/fmcs/102?action=write&comcd=' + company_cd + '&resve_no=' + data.r_num + '&from_panel=true';
-
-                        if (isAutoLink) {
-                            window.location.href = targetUrl;
-                        } else {
-                            openPaymentInNewTab(targetUrl);
-                        }
-                        
-                        resolve(true);
+                function handleErrorResponse() {
+                    if (retryCount < 2) {
+                        console.log('[Quick Auto] 통신 실패 -> 300ms 후 자동 재시도');
+                        setTimeout(function() {
+                            custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
+                        }, 300);
+                    } else {
+                        alert('예약 요청 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+                        resolve(false);
                     }
-                });
+                }
+
+                // 💡 GM_xmlhttpRequest 사용 가능한 환경이면 우선 실행 (파이어폭스 세션 차단 우회)
+                if (typeof GM_xmlhttpRequest !== 'undefined') {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url: win.location.origin + targetApiUrl,
+                        headers: {
+                            "X-Requested-With": "XMLHttpRequest"
+                        },
+                        onload: function(response) {
+                            try {
+                                var data = JSON.parse(response.responseText);
+                                handleSuccessResponse(data);
+                            } catch (e) {
+                                handleErrorResponse();
+                            }
+                        },
+                        onerror: handleErrorResponse
+                    });
+                } else {
+                    fetch(targetApiUrl, {
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'include'
+                    }).then(function(res) {
+                        return res.json();
+                    }).then(function(data) {
+                        handleSuccessResponse(data);
+                    }).catch(handleErrorResponse);
+                }
             });
         }
 

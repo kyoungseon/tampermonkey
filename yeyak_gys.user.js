@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.15
-// @description  Quick 예약, 최초 로딩 시 다음 달 자동 조회 및 기준일 지정 적용
+// @version      0.9.16
+// @description  Quick 예약, 상품 목록 기본값 지정 복원 및 최초 다음달 로딩
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -210,6 +210,16 @@
             }
             return false;
         }
+
+        // 기본 상품 목록 설정
+        const PROGRAM_LIST_DEFAULT = [
+            {"item_nm":"온라인 일일입장(경로/복지)","sale_amt":1650,"item_cd":"I000221"},
+            {"item_nm":"온라인 일일입장(일반)","sale_amt":3300,"item_cd":"I000222"},
+            {"item_nm":"온라인 일일입장(청소년/군인)","sale_amt":2200,"item_cd":"I000227"},
+            {"item_nm":"온라인 관외할증(경로/복지)","sale_amt":2470,"item_cd":"I000225"},
+            {"item_nm":"온라인 관외할증(일반)","sale_amt":4950,"item_cd":"I000224"},
+            {"item_nm":"온라인 관외할증(군인/청소년)","sale_amt":3300,"item_cd":"I000226"}
+        ];
 
         function openPaymentInNewTab(url) {
             const form = document.createElement('form');
@@ -499,7 +509,7 @@
             const container = document.getElementById('container') || document.body;
             container.appendChild(panel);
 
-            // 1. 상품 목록만 독립 갱신 (API response 결과만 반영)
+            // 1. 상품 목록만 독립 갱신 (API 결과가 없으면 기본값 사용)
             async function updateProgramSelectOptions(targetDate, isManualClick) {
                 if (typeof isManualClick === 'undefined') isManualClick = false;
 
@@ -515,34 +525,28 @@
                 const programSelectEl = document.getElementById('gys-program-select');
                 if (!programSelectEl) return;
 
-                const currentVal = programSelectEl.value || safeLocal.get('gys_saved_program_cd') || "";
+                const currentVal = programSelectEl.value || safeLocal.get('gys_saved_program_cd') || "I000221";
                 const dynamicItems = await fetchItemList(targetDate);
+                const listToUse = (dynamicItems && dynamicItems.length > 0) ? dynamicItems : PROGRAM_LIST_DEFAULT;
 
                 const fragment = document.createDocumentFragment();
-                if (dynamicItems && dynamicItems.length > 0) {
-                    dynamicItems.forEach(function(p) {
-                        const option = document.createElement('option');
-                        const code = p.item_cd || p.item_code;
-                        const rawName = p.item_nm || p.item_name;
-                        const name = formatProgramName(rawName);
-                        const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
+                listToUse.forEach(function(p) {
+                    const option = document.createElement('option');
+                    const code = p.item_cd || p.item_code;
+                    const rawName = p.item_nm || p.item_name;
+                    const name = formatProgramName(rawName);
+                    const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
 
-                        option.value = code;
-                        option.textContent = name + (price !== undefined ? ' (' + price.toLocaleString() + '원)' : '');
-                        if (code === currentVal) option.selected = true;
-                        fragment.appendChild(option);
-                    });
-                } else {
-                    const emptyOpt = document.createElement('option');
-                    emptyOpt.value = "";
-                    emptyOpt.textContent = "조회된 상품 없음";
-                    fragment.appendChild(emptyOpt);
-                }
+                    option.value = code;
+                    option.textContent = name + (price !== undefined ? ' (' + price.toLocaleString() + '원)' : '');
+                    if (code === currentVal) option.selected = true;
+                    fragment.appendChild(option);
+                });
 
                 programSelectEl.replaceChildren(fragment);
             }
 
-            // 2. 시간대 목록만 독립 갱신 (API response 결과만 반영)
+            // 2. 시간대 목록만 독립 갱신 (API response 결과 반영)
             async function updateTimeSelectOptions(targetDate) {
                 const selectEl = document.getElementById('gys-time-select');
                 if (!selectEl) return;

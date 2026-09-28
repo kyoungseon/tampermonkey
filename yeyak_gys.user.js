@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
+// @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
 // @namespace    http://tampermonkey.net/
-// @version      8.5
-// @description  GM_xmlhttpRequest 적용으로 모바일 파이어폭스 불러오기 오류 및 세션 차단 완전 해결
+// @version      9.7
+// @description  Quick 예약, 1회성 세션 관리(컨펌창 정상화), 파이어폭스/크롬 CSP 및 모바일 세션 완벽 호환
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -100,7 +100,7 @@
             }
             return;
         }
-        
+
         return;
     }
 
@@ -130,7 +130,7 @@
                 }
             });
         }
-    } 
+    }
     // =============================================================
     // [PART C] 예약 메인 페이지 (/fmcs/102) 처리
     // =============================================================
@@ -186,7 +186,6 @@
             document.body.removeChild(form);
         }
 
-        // 💡 모바일 파이어폭스 완벽 지원을 위한 GM_xmlhttpRequest / fetch 하이브리드 요청 함수
         function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount) {
             if (typeof isAutoLink === 'undefined') isAutoLink = false;
             if (typeof retryCount === 'undefined') retryCount = 0;
@@ -234,7 +233,7 @@
                     } else {
                         openPaymentInNewTab(targetUrl);
                     }
-                    
+
                     resolve(true);
                 }
 
@@ -250,7 +249,6 @@
                     }
                 }
 
-                // 💡 GM_xmlhttpRequest 사용 가능한 환경이면 우선 실행 (파이어폭스 세션 차단 우회)
                 if (typeof GM_xmlhttpRequest !== 'undefined') {
                     GM_xmlhttpRequest({
                         method: "GET",
@@ -349,6 +347,7 @@
                     'margin: 20px auto 40px auto !important;' +
                     'width: 95% !important;' +
                     'max-width: 500px !important;' +
+                    'box-sizing: border-box !important;' +
                 '}' +
                 '@media (min-width: 769px) {' +
                     'body, #header, header, #container, .alignbox, #section, footer {' +
@@ -384,7 +383,7 @@
 
             const panel = document.createElement('div');
             panel.id = 'gys-custom-panel';
-            
+
             Object.assign(panel.style, {
                 backgroundColor: '#ffffff',
                 border: '2px solid #1969c5',
@@ -431,11 +430,11 @@
                     '</select>' +
                 '</div>' +
                 '<hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 10px 0;">' +
-                '<div id="gys-calendar-wrapper">' +
+                '<div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box;">' +
                     '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; text-align: center; font-weight: bold; font-size: 13px; margin-bottom: 6px; background-color: #f1f3f5; padding: 6px 0; border-radius: 4px;">' +
                         '<span style="color: #d9534f;">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span style="color: #0275d8;">토</span>' +
                     '</div>' +
-                    '<div id="gys-date-buttons-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">' +
+                    '<div id="gys-date-buttons-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; width: 100%; box-sizing: border-box;">' +
                         '<div style="grid-column: span 7; font-size: 12px; color: #666666; text-align: center; padding: 15px 0;">날짜 데이터를 불러오는 중...</div>' +
                     '</div>' +
                 '</div>';
@@ -511,15 +510,16 @@
                     return parseInt(parts[0], 10) === curYear && parseInt(parts[1], 10) === (curMonth + 1);
                 });
 
+                // --- 이전 달 비활성화 셀 처리 ---
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
                     const prevCell = document.createElement('div');
-                    prevCell.textContent = (prevMonthLastDay - i) + '일';
+                    prevCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
+
                     Object.assign(prevCell.style, {
-                        height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: '#f8f9fa', color: '#ced4da', borderRadius: '4px', fontSize: '12px',
-                        fontWeight: 'bold', border: '1px solid #e9ecef', cursor: 'not-allowed'
+                        height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
+                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
                     });
                     btnContainer.appendChild(prevCell);
                 }
@@ -530,34 +530,58 @@
                     const formattedResveDate = rawDate.replace(/-/g, '');
                     const dayOfWeek = new Date(rawDate).getDay();
 
+                    // 날짜 기본 색상 (일요일: 빨강, 토요일: 파랑, 평일: 검정)
                     let textColor = '#333333';
                     if (dayOfWeek === 0) textColor = '#d9534f';
                     if (dayOfWeek === 6) textColor = '#0275d8';
 
-                    if (item.state_cd === "30") {
-                        const adviceText = item.close_advice || item.state_nm || '휴관일';
+                    // 1. close_advice 값 존재 여부 최우선 확인
+                    const hasCloseAdvice = item.close_advice && item.close_advice.trim() !== '';
+                    let stateText = hasCloseAdvice ? item.close_advice.trim() : (item.state_nm || '예약마감');
+                    let stateColor = '#6c757d'; // 기본 예약마감 (회색)
+
+                    // 2. 텍스트 및 코드에 따른 색상 설정
+                    if (stateText.indexOf('예약기간') !== -1) {
+                        stateColor = '#d1d5db'; // 예약기간 아님 (흰색에 가까운 연회색)
+                    } else if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1) {
+                        stateColor = '#d9534f'; // 휴관일/사유존재 (빨간색)
+                    } else if (stateText.indexOf('가능') !== -1) {
+                        stateColor = '#0275d8'; // 예약가능 (파란색)
+                    } else {
+                        stateColor = '#6c757d'; // 예약마감 (회색)
+                    }
+
+                    // --- 휴관일 및 사유(close_advice)가 있는 비활성화 셀 처리 ---
+                    if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedCell = document.createElement('div');
                         closedCell.innerHTML = '' +
-                            '<span style="font-size:12px; line-height: 1.1; color: #adb5bd;">' + dayNum + '일</span>' +
-                            '<span style="font-size: 9px; color: #d9534f; margin-top: 2px; line-height: 1.1; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; text-overflow: ellipsis; word-break: break-all; text-align: center; max-width: 100%; font-weight: bold;">' + adviceText + '</span>';
+                            '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
+                            '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; font-weight: bold; line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
+
                         Object.assign(closedCell.style, {
-                            height: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                            backgroundColor: '#e9ecef', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold', border: '1px solid #dee2e6', boxSizing: 'border-box', padding: '2px', cursor: 'not-allowed'
+                            height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
+                            boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
                         });
                         btnContainer.appendChild(closedCell);
                         return;
                     }
 
+                    // --- 예약 가능 / 마감 날짜 버튼 처리 ---
                     const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.baseDay = '' + dayNum;
                     dateBtn.dataset.count = "0";
-                    dateBtn.innerHTML = '<span>' + dayNum + '일</span>';
+
+                    dateBtn.innerHTML = '' +
+                        '<div class="gys-day-number" style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
+                        '<div class="gys-count-badge" style="position: absolute; top: 22px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1;"></div>' +
+                        '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; font-weight: bold; text-align: center; line-height: 1.1; word-break: keep-all;">' +
+                            stateText +
+                        '</div>';
 
                     Object.assign(dateBtn.style, {
-                        height: '52px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: '#ffffff', border: '1px solid #b0c4de', borderRadius: '4px', cursor: 'pointer',
-                        fontSize: '13px', fontWeight: 'bold', color: textColor, boxSizing: 'border-box', padding: '2px', transition: 'all 0.15s'
+                        height: '62px', backgroundColor: '#ffffff', border: '1px solid #e0e0e0', borderRadius: '4px',
+                        cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.15s', position: 'relative', width: '100%'
                     });
 
                     dateBtn.onmouseover = function() { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#e8f4ff'; };
@@ -574,7 +598,8 @@
                         if (isSuccess) {
                             let count = parseInt(dateBtn.dataset.count, 10) + 1;
                             dateBtn.dataset.count = count.toString();
-                            dateBtn.innerHTML = '<span>' + dayNum + '일</span><span style="font-size:10px; color:#28a745;">(' + count + ')</span>';
+
+                            dateBtn.querySelector('.gys-count-badge').textContent = '(' + count + ')';
                             dateBtn.style.backgroundColor = '#d4edda';
                             dateBtn.style.borderColor = '#28a745';
                         } else {
@@ -587,15 +612,16 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
+                // --- 다음 달 비활성화 셀 처리 ---
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
                     const nextCell = document.createElement('div');
-                    nextCell.textContent = nextDayNum + '일';
+                    nextCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
+
                     Object.assign(nextCell.style, {
-                        height: '52px', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        backgroundColor: '#f8f9fa', color: '#ced4da', borderRadius: '4px', fontSize: '12px',
-                        fontWeight: 'bold', border: '1px solid #e9ecef', cursor: 'not-allowed'
+                        height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
+                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
                     });
                     btnContainer.appendChild(nextCell);
                 }
@@ -627,7 +653,7 @@
                 await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true);
             } else {
                 const isPureMainPage = Array.from(urlParams.keys()).length === 0;
-                
+
                 if (isPureMainPage) {
                     createCustomPanel();
                 } else {

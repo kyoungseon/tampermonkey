@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.22
-// @description  Quick 예약, 기준일 자동 선택 시 화요일 제외 로직 추가 및 스크롤 최적화
+// @version      0.9.29
+// @description  Quick 예약, 타이틀 하단 h2 스타일 구분선(border-bottom) 추가 및 레이아웃 정돈
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -17,6 +17,9 @@
     'use strict';
 
     const win = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+
+    // 서버 시간과 핸드폰 시간의 차이(ms) 오프셋 변수
+    let serverTimeOffsetMs = 0;
 
     const safeSession = {
         get: function(key) {
@@ -404,18 +407,58 @@
             return targetYM;
         }
 
-        // 패널 상단으로 화면 스크롤 보정 (상단 여백 20px 적용)
+        // 패널 상단 스크롤 보정
         function scrollToPanelTop() {
             const panel = document.getElementById('gys-custom-panel');
             if (!panel) return;
             
             const rect = panel.getBoundingClientRect();
-            const offsetTop = window.pageYOffset + rect.top - 20;
+            const offsetTop = window.pageYOffset + rect.top - 7;
             
             window.scrollTo({
                 top: Math.max(0, offsetTop),
                 behavior: 'smooth'
             });
+        }
+
+        // 서버 시간과의 시간차(ms)를 보정하여 실시간 시계 & 게이지 바 동시 구동
+        function initRealtimeClock() {
+            const clockEl = document.getElementById('gys-realtime-clock');
+            const gaugeBarEl = document.getElementById('gys-ms-gauge-bar');
+            if (!clockEl || !gaugeBarEl) return;
+
+            // 웹사이트 HEAD 비동기 요청을 통한 서버 Date 헤더 시간 파악
+            const startReqTime = Date.now();
+            fetch(window.location.href, { method: 'HEAD', cache: 'no-cache' }).then(response => {
+                const serverDateHeader = response.headers.get('date');
+                if (serverDateHeader) {
+                    const serverTime = new Date(serverDateHeader).getTime();
+                    const endReqTime = Date.now();
+                    const networkLatency = Math.floor((endReqTime - startReqTime) / 2);
+                    
+                    serverTimeOffsetMs = (serverTime + networkLatency) - endReqTime;
+                    console.log(`[Quick Auto] 서버 시간 보정 완료 (오차: ${serverTimeOffsetMs}ms)`);
+                }
+            }).catch(() => {});
+
+            function renderClockAndGauge() {
+                const now = new Date(Date.now() + serverTimeOffsetMs);
+                const hh = String(now.getHours()).padStart(2, '0');
+                const mi = String(now.getMinutes()).padStart(2, '0');
+                const ss = String(now.getSeconds()).padStart(2, '0');
+                const ms = now.getMilliseconds(); // 0 ~ 999 ms
+
+                // 1. HH:MM:SS 시간 표기
+                clockEl.textContent = `${hh}:${mi}:${ss}`;
+
+                // 2. 밀리초 게이지 폭 계산 (0% ~ 100%)
+                const percentage = (ms / 1000) * 100;
+                gaugeBarEl.style.width = `${percentage}%`;
+
+                requestAnimationFrame(renderClockAndGauge);
+            }
+
+            requestAnimationFrame(renderClockAndGauge);
         }
 
         function applyResponsiveStyles() {
@@ -425,7 +468,7 @@
             style.textContent = '' +
                 '#gys-custom-panel {' +
                     'position: static !important;' +
-                    'margin: 15px auto 130px auto !important;' +
+                    'margin: 5px auto 130px auto !important;' +
                     'width: 99% !important;' +
                     'max-width: 500px !important;' +
                     'box-sizing: border-box !important;' +
@@ -481,16 +524,27 @@
             });
 
             panel.innerHTML = '' +
-                '<div style="font-weight: bold; font-size: 15px; margin-bottom: 8px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 4px; padding-left: 4px;">' +
-                    '⛳ 성저파크골프장 Quick 예약' +
+                // 타이틀 영역 + HTML h2 스타일 구분선(border-bottom) 반영
+                '<div style="display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid #1969c5; padding-bottom: 6px; margin-bottom: 8px; padding-left: 2px; padding-right: 2px;">' +
+                    // 타이틀
+                    '<span style="font-weight: bold; font-size: 17.5px; color: #1969c5; line-height: 1.1;">⛳ 성저파크골프장 Quick 예약</span>' +
+                    // 오른쪽: [위] 게이지 바 -> [아래] 시분초 디지털 시계
+                    '<div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px; width: 75px;">' +
+                        // 게이지 바 트랙
+                        '<div style="width: 100%; height: 4px; background-color: #e2e8f0; border-radius: 2px; overflow: hidden;">' +
+                            '<div id="gys-ms-gauge-bar" style="width: 0%; height: 100%; background-color: #28a745; transition: none;"></div>' +
+                        '</div>' +
+                        // 시분초 시계
+                        '<span id="gys-realtime-clock" style="font-size: 14.5px; color: #0056b3; font-family: monospace; font-weight: bold; line-height: 1; letter-spacing: 0.5px;" title="서버시간 동기화 완료">00:00:00</span>' +
+                    '</div>' +
                 '</div>' +
-                // 상단 레이아웃: [달 선택(다음달 기본)] | [기준일 선택(톤다운)]
+                // 컨트롤 영역: [달 선택(다음달 기본)] | [기준일 선택(톤다운)]
                 '<div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; padding: 0 2px;">' +
                     // 달 선택 영역
                     '<div style="display: flex; gap: 3px; align-items: center;">' +
-                        '<button id="gys-prev-month-btn" title="이전 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">◀</button>' +
+                        '<button id="gys-prev-month-btn" title="이전 달" style="width: 40px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">◀</button>' +
                         '<button id="gys-ym-reload-btn" title="클릭 시 현재 선택 달 재조회" style="width: 96px; height: 32px; border: 1.5px solid #1969c5; border-radius: 4px; text-align: center; font-weight: bold; font-size: 14.5px; background-color: #e8f4ff; color: #1969c5; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">' + defaultYMDot + '</button>' +
-                        '<button id="gys-next-month-btn" title="다음 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">▶</button>' +
+                        '<button id="gys-next-month-btn" title="다음 달" style="width: 40px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">▶</button>' +
                     '</div>' +
                     // 기준일 선택 영역
                     '<div style="display: flex; align-items: center; gap: 3px;">' +
@@ -522,6 +576,9 @@
 
             const container = document.getElementById('container') || document.body;
             container.appendChild(panel);
+
+            // 실시간 밀리초 게이지 시계 가동
+            initRealtimeClock();
 
             // 1. 상품 목록만 독립 갱신 (API 결과가 없으면 기본값 사용)
             async function updateProgramSelectOptions(targetDate, isManualClick) {
@@ -630,15 +687,14 @@
                 let firstWorkDateHyphen = "";
                 for (let i = 0; i < currentMonthItems.length; i++) {
                     const item = currentMonthItems[i];
-                    const itemDayOfWeek = new Date(item.date).getDay(); // 0: 일, 1: 월, 2: 화, ...
+                    const itemDayOfWeek = new Date(item.date).getDay();
                     
                     const hasClose = item.close_advice && item.close_advice.trim() !== '';
                     const stateText = hasClose ? item.close_advice.trim() : (item.state_nm || '');
                     
-                    // 화요일(2) 이거나 휴관/대회 등 영업 불가능일 경우 제외
                     const isClosed = itemDayOfWeek === 2 || hasClose || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1;
                     if (!isClosed) {
-                        firstWorkDateHyphen = item.date; // YYYY-MM-DD
+                        firstWorkDateHyphen = item.date;
                         break;
                     }
                 }
@@ -663,16 +719,16 @@
 
                 btnContainer.innerHTML = '';
 
-                // --- 이전 달 비활성화 셀 처리 (높이 64px) ---
+                // --- 이전 달 비활성화 셀 처리 (높이 70px) ---
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
                     const prevBtn = document.createElement('button');
                     prevBtn.disabled = true;
-                    prevBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
+                    prevBtn.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
 
                     Object.assign(prevBtn.style, {
-                        height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                        height: '70px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                     });
                     btnContainer.appendChild(prevBtn);
@@ -712,16 +768,16 @@
 
                     const fontWeightStyle = isAvailable ? 'font-weight: bold;' : 'font-weight: normal;';
 
-                    // --- 비활성화 버튼 처리 (높이 64px) ---
+                    // --- 비활성화 버튼 처리 (높이 70px) ---
                     if (isPastDay || hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
                         closedBtn.innerHTML = '' +
-                            '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + (isPastDay ? '#ced4da' : textColor) + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
-                            '<div style="position: absolute; bottom: 4px; left: 1px; right: 1px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
+                            '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + (isPastDay ? '#ced4da' : textColor) + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
+                            '<div style="position: absolute; bottom: 5px; left: 1px; right: 1px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 9.5px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
                         
                         Object.assign(closedBtn.style, {
-                            height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                            height: '70px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                             boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                         });
 
@@ -729,21 +785,21 @@
                         return;
                     }
 
-                    // --- 클릭 가능한 일반 날짜 버튼 처리 (높이 64px) ---
+                    // --- 클릭 가능한 일반 날짜 버튼 처리 (높이 70px) ---
                     const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.baseDay = '' + dayNum;
                     dateBtn.dataset.count = "0";
 
                     dateBtn.innerHTML = '' +
-                        '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
-                        '<div class="gys-count-badge" style="position: absolute; top: 22px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
-                        '<div style="position: absolute; bottom: 4px; left: 1px; right: 1px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
+                        '<div class="gys-day-number" style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
+                        '<div class="gys-count-badge" style="position: absolute; top: 24px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
+                        '<div style="position: absolute; bottom: 5px; left: 1px; right: 1px; height: 30px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
                             stateText +
                         '</div>';
 
                     Object.assign(dateBtn.style, {
-                        height: '64px', backgroundColor: '#ffffff', border: '1px solid #d0d0d0', borderRadius: '3px',
+                        height: '70px', backgroundColor: '#ffffff', border: '1px solid #d0d0d0', borderRadius: '3px',
                         cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.15s', position: 'relative', width: '100%', padding: '0'
                     });
 
@@ -781,16 +837,16 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
-                // --- 다음 달 비활성화 셀 처리 (높이 64px) ---
+                // --- 다음 달 비활성화 셀 처리 (높이 70px) ---
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
                     const nextBtn = document.createElement('button');
                     nextBtn.disabled = true;
-                    nextBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
+                    nextBtn.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
 
                     Object.assign(nextBtn.style, {
-                        height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                        height: '70px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                     });
                     btnContainer.appendChild(nextBtn);

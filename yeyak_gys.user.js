@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7
-// @description  Quick 예약, 상단 조회 세트와 시간대/상품 콤보박스 세트 가로 너비 일치 및 레이아웃 통일감 개선
+// @version      0.9.15
+// @description  Quick 예약, 최초 로딩 시 다음 달 자동 조회 및 기준일 지정 적용
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -48,6 +48,54 @@
     function formatProgramName(name) {
         if (!name) return '';
         return name.replace(/^온라인\s*/, '');
+    }
+
+    // 오늘 날짜 반환 (YYYYMMDD)
+    function getTodayYMD() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        return '' + yyyy + mm + dd;
+    }
+
+    // 오늘 날짜 반환 (YYYY-MM-DD)
+    function getTodayYMDHyphen() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        const dd = String(today.getDate()).padStart(2, '0');
+        return `${yyyy}-${mm}-${dd}`;
+    }
+
+    // 이번 달 YYYYMM 반환
+    function getCurrentYM() {
+        const today = new Date();
+        const yyyy = today.getFullYear();
+        const mm = String(today.getMonth() + 1).padStart(2, '0');
+        return '' + yyyy + mm;
+    }
+
+    // YYYYMM -> YYYY.MM 포맷팅
+    function formatYMWithDot(ymStr) {
+        if (!ymStr || ymStr.length !== 6) return ymStr;
+        return ymStr.substring(0, 4) + '.' + ymStr.substring(4, 6);
+    }
+
+    // YYYY.MM -> YYYYMM 순수 숫자 변환
+    function parseYMFromDot(ymDotStr) {
+        if (!ymDotStr) return getCurrentYM();
+        return ymDotStr.replace(/\./g, '');
+    }
+
+    // 입력 날짜가 오늘보다 과거인지 확인 후 검증된 YYYYMMDD 반환
+    function getValidTargetDate(dateStr) {
+        const pureDate = (dateStr || '').replace(/-/g, '');
+        const todayPure = getTodayYMD();
+        if (!pureDate || pureDate < todayPure) {
+            return todayPure;
+        }
+        return pureDate;
     }
 
     // =============================================================
@@ -162,15 +210,6 @@
             }
             return false;
         }
-
-        let PROGRAM_LIST = [
-            {"item_nm":"온라인 일일입장(경로/복지)","sale_amt":1650,"item_cd":"I000221"},
-            {"item_nm":"온라인 일일입장(일반)","sale_amt":3300,"item_cd":"I000222"},
-            {"item_nm":"온라인 일일입장(청소년/군인)","sale_amt":2200,"item_cd":"I000227"},
-            {"item_nm":"온라인 관외할증(경로/복지)","sale_amt":2470,"item_cd":"I000225"},
-            {"item_nm":"온라인 관외할증(일반)","sale_amt":4950,"item_cd":"I000224"},
-            {"item_nm":"온라인 관외할증(군인/청소년)","sale_amt":3300,"item_cd":"I000226"}
-        ];
 
         function openPaymentInNewTab(url) {
             const form = document.createElement('form');
@@ -310,7 +349,8 @@
         }
 
         async function fetchTimeSlots(targetDate) {
-            const url = '/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=' + targetDate + '&_=' + Date.now();
+            const validDate = getValidTargetDate(targetDate);
+            const url = '/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=' + validDate + '&_=' + Date.now();
             try {
                 const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
                 if (!res.ok) throw new Error('HTTP Error ' + res.status);
@@ -326,7 +366,8 @@
 
             if (!isLogged || !memNo) return null;
 
-            const url = '/rest/dailyuse/item_list?company_code=GYS10&resve_part_code=03&resve_date=' + targetDate + '&member_code=' + memNo + '&_=' + Date.now();
+            const validDate = getValidTargetDate(targetDate);
+            const url = '/rest/dailyuse/item_list?company_code=GYS10&resve_part_code=03&resve_date=' + validDate + '&member_code=' + memNo + '&_=' + Date.now();
             try {
                 const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
                 if (!res.ok) throw new Error('HTTP Error ' + res.status);
@@ -338,22 +379,19 @@
             return null;
         }
 
-        function getNextMonthYM() {
-            const today = new Date();
-            const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-            const yyyy = nextMonthDate.getFullYear();
-            const mm = String(nextMonthDate.getMonth() + 1).padStart(2, '0');
-            return '' + yyyy + mm;
-        }
-
         function addMonthsToYM(ymStr, offset) {
             if (!ymStr || ymStr.length !== 6) return ymStr;
             const year = parseInt(ymStr.substring(0, 4), 10);
             const month = parseInt(ymStr.substring(4, 6), 10) - 1;
             const targetDate = new Date(year, month + offset, 1);
-            const yyyy = targetDate.getFullYear();
-            const mm = String(targetDate.getMonth() + 1).padStart(2, '0');
-            return '' + yyyy + mm;
+            
+            const currentYM = getCurrentYM();
+            const targetYM = '' + targetDate.getFullYear() + String(targetDate.getMonth() + 1).padStart(2, '0');
+            
+            if (targetYM < currentYM) {
+                return currentYM;
+            }
+            return targetYM;
         }
 
         function applyResponsiveStyles() {
@@ -398,10 +436,12 @@
             if (document.getElementById('gys-custom-panel')) return;
 
             applyResponsiveStyles();
-            const defaultYM = getNextMonthYM();
 
-            const savedTimeSeq = safeLocal.get('gys_saved_time_seq') || "15";
-            const savedProgramCd = safeLocal.get('gys_saved_program_cd') || "I000221";
+            // 최초 로딩 시 기본 달을 '다음 달'로 설정
+            const currentYM = getCurrentYM();
+            const defaultYM = addMonthsToYM(currentYM, 1);
+            const defaultYMDot = formatYMWithDot(defaultYM);
+            const todayHyphen = getTodayYMDHyphen();
 
             const panel = document.createElement('div');
             panel.id = 'gys-custom-panel';
@@ -416,61 +456,33 @@
                 boxSizing: 'border-box'
             });
 
-            const programOptionsHtml = PROGRAM_LIST.map(function(p) {
-                const code = p.item_cd || p.item_code;
-                const rawName = p.item_nm || p.item_name;
-                const name = formatProgramName(rawName);
-                const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
-                const isSelected = code === savedProgramCd ? "selected" : "";
-                return '<option value="' + code + '" ' + isSelected + '>' + name + ' (' + price.toLocaleString() + '원)</option>';
-            }).join('');
-
-            const timeOptionsList = [
-                { seq: "10", name: "1부 | 06:30~08:30" },
-                { seq: "6",  name: "2부 | 09:00~11:00" },
-                { seq: "7",  name: "3부 | 11:30~13:30" },
-                { seq: "15", name: "4부 | 14:00~16:00" },
-                { seq: "8",  name: "5부 | 16:30~18:30" },
-                { seq: "11", name: "6부 | 19:00~21:00" }
-            ];
-
-            const timeOptionsHtml = timeOptionsList.map(function(t) {
-                const isSelected = String(t.seq) === String(savedTimeSeq) ? "selected" : "";
-                return '<option value="' + t.seq + '" ' + isSelected + '>' + t.name + '</option>';
-            }).join('');
-
             panel.innerHTML = '' +
                 '<div style="font-weight: bold; font-size: 15px; margin-bottom: 8px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 4px; padding-left: 4px;">' +
                     '⛳ 성저파크골프장 Quick 예약' +
                 '</div>' +
-                // [수정] 상단 조회 세트 레이아웃을 4.2fr 5.8fr 비율로 하단 콤보박스와 가로 폭 일치
-                '<div style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
+                // 상단 레이아웃: [달 선택(다음달 기본)] | [기준일 선택(톤다운)]
+                '<div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; padding: 0 2px;">' +
+                    // 달 선택 영역 (다음 달 기본 세팅)
                     '<div style="display: flex; gap: 3px; align-items: center;">' +
-                        '<button id="gys-prev-month-btn" title="이전 달" style="padding: 6px 8px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 0 0 auto;">◀</button>' +
-                        '<input type="text" id="gys-ym-input" placeholder="YYYYMM" value="' + defaultYM + '" style="flex: 1; min-width: 0; width: 100%; padding: 5px 2px; border: 1px solid #cccccc; border-radius: 4px; text-align: center; font-weight: bold; font-size: 14px; box-sizing: border-box;">' +
-                        '<button id="gys-next-month-btn" title="다음 달" style="padding: 6px 8px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 0 0 auto;">▶</button>' +
+                        '<button id="gys-prev-month-btn" title="이전 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">◀</button>' +
+                        '<button id="gys-ym-reload-btn" title="클릭 시 현재 선택 달 재조회" style="width: 96px; height: 32px; border: 1.5px solid #1969c5; border-radius: 4px; text-align: center; font-weight: bold; font-size: 14.5px; background-color: #e8f4ff; color: #1969c5; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">' + defaultYMDot + '</button>' +
+                        '<button id="gys-next-month-btn" title="다음 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">▶</button>' +
                     '</div>' +
-                    '<div>' +
-                        '<button id="gys-fetch-btn" title="달력 데이터 조회/새로고침" style="width: 100%; height: 32px; background-color: #1969c5; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13.5px; box-sizing: border-box;">🔍 조회</button>' +
+                    // 기준일 선택 영역 (톤다운)
+                    '<div style="display: flex; align-items: center; gap: 3px;">' +
+                        '<span style="font-size: 10.5px; font-weight: normal; color: #777777; white-space: nowrap;">기준일:</span>' +
+                        '<input type="date" id="gys-base-date-input" value="' + todayHyphen + '" min="' + todayHyphen + '" style="width: 108px; height: 26px; padding: 1px 2px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 10.5px; font-weight: normal; color: #555555; background-color: #f8f9fa; text-align: center; box-sizing: border-box;">' +
+                        '<button id="gys-refresh-options-btn" title="시간대/상품 갱신" style="height: 26px; padding: 0 4px; background-color: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 4px; cursor: pointer; font-size: 10px; color: #666666; display: flex; align-items: center; justify-content: center;">🔄</button>' +
                     '</div>' +
                 '</div>' +
-                '<div style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
-                    '<div>' +
-                        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">' +
-                            '<label style="font-size: 11px; font-weight: bold; color: #333333;">⏰ 시간대:</label>' +
-                            '<button id="gys-refresh-time-btn" title="시간대 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
-                        '</div>' +
-                        '<select id="gys-time-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
-                            timeOptionsHtml +
+                // 하단: 시간대 콤보박스 | 상품 콤보박스 (5:5 비율)
+                '<div style="margin-bottom: 8px; padding: 0 2px;">' +
+                    '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px;">' +
+                        '<select id="gys-time-select" style="width: 100%; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
+                            '<option value="">시간대 로딩 중...</option>' +
                         '</select>' +
-                    '</div>' +
-                    '<div>' +
-                        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">' +
-                            '<label style="font-size: 11px; font-weight: bold; color: #333333;">🎫 상품 선택:</label>' +
-                            '<button id="gys-refresh-program-btn" title="상품 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
-                        '</div>' +
-                        '<select id="gys-program-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
-                            programOptionsHtml +
+                        '<select id="gys-program-select" style="width: 100%; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
+                            '<option value="">상품 로딩 중...</option>' +
                         '</select>' +
                     '</div>' +
                 '</div>' +
@@ -487,7 +499,7 @@
             const container = document.getElementById('container') || document.body;
             container.appendChild(panel);
 
-            // 1. 상품 목록만 독립 갱신
+            // 1. 상품 목록만 독립 갱신 (API response 결과만 반영)
             async function updateProgramSelectOptions(targetDate, isManualClick) {
                 if (typeof isManualClick === 'undefined') isManualClick = false;
 
@@ -503,37 +515,43 @@
                 const programSelectEl = document.getElementById('gys-program-select');
                 if (!programSelectEl) return;
 
-                const currentVal = programSelectEl.value || safeLocal.get('gys_saved_program_cd') || "I000221";
+                const currentVal = programSelectEl.value || safeLocal.get('gys_saved_program_cd') || "";
                 const dynamicItems = await fetchItemList(targetDate);
-                const listToUse = dynamicItems || PROGRAM_LIST;
 
                 const fragment = document.createDocumentFragment();
-                listToUse.forEach(function(p) {
-                    const option = document.createElement('option');
-                    const code = p.item_cd || p.item_code;
-                    const rawName = p.item_nm || p.item_name;
-                    const name = formatProgramName(rawName);
-                    const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
+                if (dynamicItems && dynamicItems.length > 0) {
+                    dynamicItems.forEach(function(p) {
+                        const option = document.createElement('option');
+                        const code = p.item_cd || p.item_code;
+                        const rawName = p.item_nm || p.item_name;
+                        const name = formatProgramName(rawName);
+                        const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
 
-                    option.value = code;
-                    option.textContent = name + ' (' + price.toLocaleString() + '원)';
-                    if (code === currentVal) option.selected = true;
-                    fragment.appendChild(option);
-                });
+                        option.value = code;
+                        option.textContent = name + (price !== undefined ? ' (' + price.toLocaleString() + '원)' : '');
+                        if (code === currentVal) option.selected = true;
+                        fragment.appendChild(option);
+                    });
+                } else {
+                    const emptyOpt = document.createElement('option');
+                    emptyOpt.value = "";
+                    emptyOpt.textContent = "조회된 상품 없음";
+                    fragment.appendChild(emptyOpt);
+                }
 
                 programSelectEl.replaceChildren(fragment);
             }
 
-            // 2. 시간대 목록만 독립 갱신
+            // 2. 시간대 목록만 독립 갱신 (API response 결과만 반영)
             async function updateTimeSelectOptions(targetDate) {
                 const selectEl = document.getElementById('gys-time-select');
                 if (!selectEl) return;
 
-                const currentVal = selectEl.value || safeLocal.get('gys_saved_time_seq') || "15";
+                const currentVal = selectEl.value || safeLocal.get('gys_saved_time_seq') || "";
                 const timeData = await fetchTimeSlots(targetDate);
 
+                const fragment = document.createDocumentFragment();
                 if (timeData && Array.isArray(timeData) && timeData.length > 0) {
-                    const fragment = document.createDocumentFragment();
                     timeData.forEach(function(item) {
                         const option = document.createElement('option');
                         option.value = item.seq;
@@ -541,31 +559,43 @@
                         if (String(item.seq) === String(currentVal)) option.selected = true;
                         fragment.appendChild(option);
                     });
-                    selectEl.replaceChildren(fragment);
+                } else {
+                    const emptyOpt = document.createElement('option');
+                    emptyOpt.value = "";
+                    emptyOpt.textContent = "조회된 시간대 없음";
+                    fragment.appendChild(emptyOpt);
                 }
+                selectEl.replaceChildren(fragment);
             }
 
-            // 3. 달력 전체 갱신
+            // 통합 Option 갱신
+            async function updateAllOptions(targetDate, isManualClick) {
+                await Promise.all([
+                    updateTimeSelectOptions(targetDate),
+                    updateProgramSelectOptions(targetDate, isManualClick)
+                ]);
+            }
+
+            // 3. 달력 전체 갱신 및 첫 영업일 자동 탐색/세팅
             async function loadDateList() {
-                const inputEl = document.getElementById('gys-ym-input');
-                const ymValue = inputEl.value.trim();
-                if (!ymValue || ymValue.length !== 6) return;
+                const ymBtn = document.getElementById('gys-ym-reload-btn');
+                let ymValue = parseYMFromDot(ymBtn.textContent.trim());
+                const currentYM = getCurrentYM();
+
+                if (!ymValue || ymValue.length !== 6 || ymValue < currentYM) {
+                    alert('과거 달은 선택하거나 조회할 수 없습니다. 이번 달로 변경합니다.');
+                    ymValue = currentYM;
+                    ymBtn.textContent = formatYMWithDot(currentYM);
+                }
 
                 const btnContainer = document.getElementById('gys-date-buttons-container');
                 btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #1969c5; text-align: center; padding: 15px 0;">날짜 데이터 로딩 중...</div>';
-
-                const firstDayOfMonth = ymValue + '01';
-
-                await updateTimeSelectOptions(firstDayOfMonth);
-                await updateProgramSelectOptions(firstDayOfMonth, false);
 
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
                     btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #d9534f; text-align: center; padding: 15px 0;">조회된 날짜 데이터가 없습니다.</div>';
                     return;
                 }
-
-                btnContainer.innerHTML = '';
 
                 const curYear = parseInt(ymValue.substring(0, 4), 10);
                 const curMonth = parseInt(ymValue.substring(4, 6), 10) - 1;
@@ -577,7 +607,41 @@
                     return parseInt(parts[0], 10) === curYear && parseInt(parts[1], 10) === (curMonth + 1);
                 });
 
-                // --- 이전 달 비활성화 셀 처리 (disabled button) ---
+                // --- 1일부터 탐색하여 첫 영업일(비휴무일) 찾기 ---
+                let firstWorkDateHyphen = "";
+                for (let i = 0; i < currentMonthItems.length; i++) {
+                    const item = currentMonthItems[i];
+                    const hasClose = item.close_advice && item.close_advice.trim() !== '';
+                    const stateText = hasClose ? item.close_advice.trim() : (item.state_nm || '');
+                    
+                    const isClosed = hasClose || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1;
+                    if (!isClosed) {
+                        firstWorkDateHyphen = item.date; // YYYY-MM-DD
+                        break;
+                    }
+                }
+
+                // 영업일을 못 찾은 경우 1일 사용
+                if (!firstWorkDateHyphen && currentMonthItems.length > 0) {
+                    firstWorkDateHyphen = currentMonthItems[0].date;
+                }
+
+                const todayHyphen = getTodayYMDHyphen();
+
+                // 탐색된 날짜가 오늘보다 과거일 경우 오늘 날짜로 보정
+                if (firstWorkDateHyphen && firstWorkDateHyphen < todayHyphen) {
+                    firstWorkDateHyphen = todayHyphen;
+                }
+
+                if (firstWorkDateHyphen) {
+                    const baseDateInput = document.getElementById('gys-base-date-input');
+                    baseDateInput.value = firstWorkDateHyphen;
+                    await updateAllOptions(firstWorkDateHyphen, false);
+                }
+
+                btnContainer.innerHTML = '';
+
+                // --- 이전 달 비활성화 셀 처리 ---
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
@@ -592,43 +656,46 @@
                     btnContainer.appendChild(prevBtn);
                 }
 
+                const todayPure = getTodayYMD();
+
                 currentMonthItems.forEach(function(item) {
                     const rawDate = item.date;
                     const dayNum = parseInt(rawDate.split('-')[2], 10);
                     const formattedResveDate = rawDate.replace(/-/g, '');
                     const dayOfWeek = new Date(rawDate).getDay();
 
-                    // 날짜 기본 색상 (일요일: 빨강, 토요일: 파랑, 평일: 검정)
                     let textColor = '#333333';
                     if (dayOfWeek === 0) textColor = '#d9534f';
                     if (dayOfWeek === 6) textColor = '#0275d8';
 
-                    // 1. close_advice 값 존재 여부 최우선 확인
+                    const isPastDay = formattedResveDate < todayPure;
+
                     const hasCloseAdvice = item.close_advice && item.close_advice.trim() !== '';
                     let stateText = hasCloseAdvice ? item.close_advice.trim() : (item.state_nm || '예약마감');
-                    let stateColor = '#6c757d'; // 기본 예약마감 (회색)
+                    let stateColor = '#6c757d';
                     let isAvailable = false;
 
-                    // 2. 텍스트 및 코드에 따른 색상/두께 설정
-                    if (stateText.indexOf('예약기간') !== -1) {
-                        stateColor = '#6c757d'; // 예약기간 아님 -> 회색(#6c757d)
+                    if (isPastDay) {
+                        stateColor = '#ced4da';
+                    } else if (stateText.indexOf('예약기간') !== -1) {
+                        stateColor = '#6c757d';
                     } else if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1) {
-                        stateColor = '#d9534f'; // 휴관일/사유존재 (빨간색)
+                        stateColor = '#d9534f';
                     } else if (stateText.indexOf('가능') !== -1) {
-                        stateColor = '#0275d8'; // 예약가능 (파란색)
+                        stateColor = '#0275d8';
                         isAvailable = true;
                     } else {
-                        stateColor = '#6c757d'; // 예약마감 (회색)
+                        stateColor = '#6c757d';
                     }
 
                     const fontWeightStyle = isAvailable ? 'font-weight: bold;' : 'font-weight: normal;';
 
-                    // --- 휴관일 및 사유(close_advice)가 있는 비활성화 셀 처리 (disabled button) ---
-                    if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
+                    // --- 비활성화 버튼 처리 (과거일 / 휴관일 / 사유 존재 등) ---
+                    if (isPastDay || hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
                         closedBtn.innerHTML = '' +
-                            '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
+                            '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + (isPastDay ? '#ced4da' : textColor) + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
                             '<div style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
                         
                         Object.assign(closedBtn.style, {
@@ -640,7 +707,7 @@
                         return;
                     }
 
-                    // --- 예약 가능 / 마감 날짜 버튼 처리 ---
+                    // --- 클릭 가능한 일반 날짜 버튼 처리 ---
                     const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.baseDay = '' + dayNum;
@@ -666,6 +733,11 @@
                         const selectedTimeSeq = document.getElementById('gys-time-select').value;
                         const selectedProgramCode = document.getElementById('gys-program-select').value;
 
+                        if (!selectedTimeSeq || !selectedProgramCode) {
+                            alert('시간대 및 상품을 선택해주세요.');
+                            return;
+                        }
+
                         dateBtn.disabled = true;
                         dateBtn.style.backgroundColor = '#e9ecef';
 
@@ -687,7 +759,7 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
-                // --- 다음 달 비활성화 셀 처리 (disabled button) ---
+                // --- 다음 달 비활성화 셀 처리 ---
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
@@ -704,26 +776,38 @@
             }
 
             // 이벤트 리스너 바인딩
-            document.getElementById('gys-fetch-btn').addEventListener('click', loadDateList); // 달력 재조회
-            
-            document.getElementById('gys-refresh-time-btn').addEventListener('click', function() { // 시간대 단독 갱신
-                const ymValue = document.getElementById('gys-ym-input').value.trim();
-                updateTimeSelectOptions(ymValue + '01');
+            const ymBtn = document.getElementById('gys-ym-reload-btn');
+
+            // YYYY.MM 버튼 클릭 시 즉시 재조회
+            ymBtn.addEventListener('click', function() {
+                loadDateList();
             });
 
-            document.getElementById('gys-refresh-program-btn').addEventListener('click', function() { // 상품 단독 갱신
-                const ymValue = document.getElementById('gys-ym-input').value.trim();
-                updateProgramSelectOptions(ymValue + '01', true);
+            // 단일 기준일 갱신 및 날짜 선택 이벤트
+            document.getElementById('gys-refresh-options-btn').addEventListener('click', function() {
+                const targetDate = document.getElementById('gys-base-date-input').value;
+                updateAllOptions(targetDate, true);
+            });
+            document.getElementById('gys-base-date-input').addEventListener('change', function() {
+                const todayHyphen = getTodayYMDHyphen();
+                if (this.value < todayHyphen) {
+                    alert('오늘 이전 날짜는 선택할 수 없습니다.');
+                    this.value = todayHyphen;
+                }
+                updateAllOptions(this.value, false);
             });
 
+            // 이전/다음 달 버튼 클릭 시 처리
             document.getElementById('gys-prev-month-btn').addEventListener('click', function() {
-                const ymInput = document.getElementById('gys-ym-input');
-                ymInput.value = addMonthsToYM(ymInput.value.trim(), -1);
+                const pureYM = parseYMFromDot(ymBtn.textContent.trim());
+                const nextYM = addMonthsToYM(pureYM, -1);
+                ymBtn.textContent = formatYMWithDot(nextYM);
                 loadDateList();
             });
             document.getElementById('gys-next-month-btn').addEventListener('click', function() {
-                const ymInput = document.getElementById('gys-ym-input');
-                ymInput.value = addMonthsToYM(ymInput.value.trim(), 1);
+                const pureYM = parseYMFromDot(ymBtn.textContent.trim());
+                const nextYM = addMonthsToYM(pureYM, 1);
+                ymBtn.textContent = formatYMWithDot(nextYM);
                 loadDateList();
             });
 

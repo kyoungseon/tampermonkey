@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
 // @namespace    http://tampermonkey.net/
-// @version      0.9.0
-// @description  Quick 예약, 시간대/상품 선택값 localStorage 저장 및 복원, 콤보박스 여백/너비 최적화, 모바일 완벽 호환
+// @version      0.9.2
+// @description  Quick 예약, 예약가능만 bold 처리, 비활성화 셀 pointer-events 차단, 선택값 자동 저장, 모바일 완벽 호환
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -205,7 +205,6 @@
             if (typeof isAutoLink === 'undefined') isAutoLink = false;
             if (typeof retryCount === 'undefined') retryCount = 0;
 
-            // 선택한 시간대 및 상품 정보 저장
             if (time_seq) safeLocal.set('gys_saved_time_seq', time_seq);
             if (program_code) safeLocal.set('gys_saved_program_cd', program_code);
 
@@ -578,11 +577,11 @@
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
                     const prevCell = document.createElement('div');
-                    prevCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
+                    prevCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + (prevMonthLastDay - i) + '</div>';
 
                     Object.assign(prevCell.style, {
                         height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
-                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
+                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                     });
                     btnContainer.appendChild(prevCell);
                 }
@@ -602,29 +601,39 @@
                     const hasCloseAdvice = item.close_advice && item.close_advice.trim() !== '';
                     let stateText = hasCloseAdvice ? item.close_advice.trim() : (item.state_nm || '예약마감');
                     let stateColor = '#6c757d'; // 기본 예약마감 (회색)
+                    let isAvailable = false;
 
-                    // 2. 텍스트 및 코드에 따른 색상 설정
+                    // 2. 텍스트 및 코드에 따른 색상/두께 설정
                     if (stateText.indexOf('예약기간') !== -1) {
-                        stateColor = '#d1d5db'; // 예약기간 아님 (흰색에 가까운 연회색)
+                        stateColor = '#d1d5db'; // 예약기간 아님 (연회색)
                     } else if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1) {
                         stateColor = '#d9534f'; // 휴관일/사유존재 (빨간색)
                     } else if (stateText.indexOf('가능') !== -1) {
                         stateColor = '#0275d8'; // 예약가능 (파란색)
+                        isAvailable = true;
                     } else {
                         stateColor = '#6c757d'; // 예약마감 (회색)
                     }
+
+                    const fontWeightStyle = isAvailable ? 'font-weight: bold;' : 'font-weight: normal;';
 
                     // --- 휴관일 및 사유(close_advice)가 있는 비활성화 셀 처리 ---
                     if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedCell = document.createElement('div');
                         closedCell.innerHTML = '' +
-                            '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
-                            '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; font-weight: bold; line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
+                            '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
+                            '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center; pointer-events: none;">' + stateText + '</div>';
                         
                         Object.assign(closedCell.style, {
                             height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
-                            boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
+                            boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                         });
+
+                        closedCell.addEventListener('click', function(e) {
+                            e.stopPropagation();
+                            e.preventDefault();
+                        });
+
                         btnContainer.appendChild(closedCell);
                         return;
                     }
@@ -636,9 +645,9 @@
                     dateBtn.dataset.count = "0";
 
                     dateBtn.innerHTML = '' +
-                        '<div class="gys-day-number" style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
-                        '<div class="gys-count-badge" style="position: absolute; top: 22px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1;"></div>' +
-                        '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; font-weight: bold; text-align: center; line-height: 1.1; word-break: keep-all;">' +
+                        '<div class="gys-day-number" style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
+                        '<div class="gys-count-badge" style="position: absolute; top: 22px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
+                        '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
                             stateText +
                         '</div>';
 
@@ -650,7 +659,8 @@
                     dateBtn.onmouseover = function() { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#e8f4ff'; };
                     dateBtn.onmouseout = function() { if (!dateBtn.disabled && dateBtn.dataset.count === "0") dateBtn.style.backgroundColor = '#ffffff'; };
 
-                    dateBtn.addEventListener('click', async function() {
+                    dateBtn.addEventListener('click', async function(e) {
+                        e.stopPropagation();
                         const selectedTimeSeq = document.getElementById('gys-time-select').value;
                         const selectedProgramCode = document.getElementById('gys-program-select').value;
 
@@ -680,11 +690,11 @@
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
                     const nextCell = document.createElement('div');
-                    nextCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
+                    nextCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + nextDayNum + '</div>';
 
                     Object.assign(nextCell.style, {
                         height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
-                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
+                        boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                     });
                     btnContainer.appendChild(nextCell);
                 }

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
 // @namespace    http://tampermonkey.net/
-// @version      9.7
-// @description  Quick 예약, 1회성 세션 관리(컨펌창 정상화), 파이어폭스/크롬 CSP 및 모바일 세션 완벽 호환
+// @version      0.9.0
+// @description  Quick 예약, 시간대/상품 선택값 localStorage 저장 및 복원, 콤보박스 여백/너비 최적화, 모바일 완벽 호환
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -30,10 +30,25 @@
         }
     };
 
+    const safeLocal = {
+        get: function(key) {
+            try { return win.localStorage.getItem(key); } catch (e) { return null; }
+        },
+        set: function(key, val) {
+            try { win.localStorage.setItem(key, val); } catch (e) {}
+        }
+    };
+
     const currentPath = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
     const actionParam = urlParams.get('action');
     const isFromPanelParam = urlParams.get('from_panel') === 'true';
+
+    // 상품명에서 '온라인 ' 접두사를 제거하는 헬퍼 함수
+    function formatProgramName(name) {
+        if (!name) return '';
+        return name.replace(/^온라인\s*/, '');
+    }
 
     // =============================================================
     // [PART A] 결제 진행 및 결과 페이지 (action 파라미터 존재 시)
@@ -100,7 +115,7 @@
             }
             return;
         }
-
+        
         return;
     }
 
@@ -111,7 +126,7 @@
         const rawReferer = urlParams.get('referer');
         const decodedReferer = rawReferer ? decodeURIComponent(rawReferer) : '';
 
-        if (decodedReferer.indexOf('autologin=true') !== -1) {
+        if (decodedReferer.indexOf('autologin=true') !== -1 || decodedReferer.indexOf('/fmcs/102') !== -1) {
             window.addEventListener('load', function() {
                 const userIdInput = document.getElementById('userId');
 
@@ -130,7 +145,7 @@
                 }
             });
         }
-    }
+    } 
     // =============================================================
     // [PART C] 예약 메인 페이지 (/fmcs/102) 처리
     // =============================================================
@@ -190,12 +205,17 @@
             if (typeof isAutoLink === 'undefined') isAutoLink = false;
             if (typeof retryCount === 'undefined') retryCount = 0;
 
+            // 선택한 시간대 및 상품 정보 저장
+            if (time_seq) safeLocal.set('gys_saved_time_seq', time_seq);
+            if (program_code) safeLocal.set('gys_saved_program_cd', program_code);
+
             return new Promise(function(resolve) {
                 var company_cd = "GYS10";
                 var target_program_code = program_code || "I000221";
 
                 if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요합니다.');
+                    handleAutoLoginRedirect();
                     resolve(false);
                     return;
                 }
@@ -233,7 +253,7 @@
                     } else {
                         openPaymentInNewTab(targetUrl);
                     }
-
+                    
                     resolve(true);
                 }
 
@@ -381,9 +401,12 @@
             applyResponsiveStyles();
             const defaultYM = getNextMonthYM();
 
+            const savedTimeSeq = safeLocal.get('gys_saved_time_seq') || "15";
+            const savedProgramCd = safeLocal.get('gys_saved_program_cd') || "I000221";
+
             const panel = document.createElement('div');
             panel.id = 'gys-custom-panel';
-
+            
             Object.assign(panel.style, {
                 backgroundColor: '#ffffff',
                 border: '2px solid #1969c5',
@@ -396,38 +419,56 @@
 
             const programOptionsHtml = PROGRAM_LIST.map(function(p) {
                 const code = p.item_cd || p.item_code;
-                const name = p.item_nm || p.item_name;
+                const rawName = p.item_nm || p.item_name;
+                const name = formatProgramName(rawName);
                 const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
-                const isSelected = code === "I000221" ? "selected" : "";
+                const isSelected = code === savedProgramCd ? "selected" : "";
                 return '<option value="' + code + '" ' + isSelected + '>' + name + ' (' + price.toLocaleString() + '원)</option>';
+            }).join('');
+
+            const timeOptionsList = [
+                { seq: "10", name: "1부 | 06:30~08:30" },
+                { seq: "6",  name: "2부 | 09:00~11:00" },
+                { seq: "7",  name: "3부 | 11:30~13:30" },
+                { seq: "15", name: "4부 | 14:00~16:00" },
+                { seq: "8",  name: "5부 | 16:30~18:30" },
+                { seq: "11", name: "6부 | 19:00~21:00" }
+            ];
+
+            const timeOptionsHtml = timeOptionsList.map(function(t) {
+                const isSelected = String(t.seq) === String(savedTimeSeq) ? "selected" : "";
+                return '<option value="' + t.seq + '" ' + isSelected + '>' + t.name + '</option>';
             }).join('');
 
             panel.innerHTML = '' +
                 '<div style="font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 6px;">' +
                     '⛳ 성저파크골프장 Quick 예약' +
                 '</div>' +
-                '<div style="display: flex; gap: 6px; margin-bottom: 12px; align-items: center;">' +
+                '<div style="display: flex; gap: 6px; margin-bottom: 10px; align-items: center;">' +
                     '<button id="gys-prev-month-btn" title="이전 달" style="padding: 7px 12px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">◀</button>' +
                     '<input type="text" id="gys-ym-input" placeholder="YYYYMM" value="' + defaultYM + '" style="width: 100px; padding: 6px 2px; border: 1px solid #cccccc; border-radius: 4px; text-align: center; font-weight: bold; font-size: 15px;">' +
                     '<button id="gys-next-month-btn" title="다음 달" style="padding: 7px 12px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">▶</button>' +
-                    '<button id="gys-fetch-btn" style="flex: 1; padding: 7px 10px; background-color: #1969c5; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">🔍 조회</button>' +
+                    '<button id="gys-fetch-btn" title="달력 데이터 조회/새로고침" style="flex: 1; padding: 7px 10px; background-color: #1969c5; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">🔍 조회</button>' +
                 '</div>' +
-                '<div style="margin-bottom: 10px;">' +
-                    '<label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px; color: #333333;">⏰ 시간대 선택:</label>' +
-                    '<select id="gys-time-select" style="width: 100%; height: 38px; padding: 6px 8px; border: 1px solid #cccccc; border-radius: 4px; font-size: 13px; font-weight: bold; line-height: 1.4;">' +
-                        '<option value="10">1부 | 06:30~08:30</option>' +
-                        '<option value="6">2부 | 09:00~11:00</option>' +
-                        '<option value="7">3부 | 11:30~13:30</option>' +
-                        '<option value="15" selected>4부 | 14:00~16:00</option>' +
-                        '<option value="8">5부 | 16:30~18:30</option>' +
-                        '<option value="11">6부 | 19:00~21:00</option>' +
-                    '</select>' +
-                '</div>' +
-                '<div style="margin-bottom: 12px;">' +
-                    '<label style="font-size: 12px; font-weight: bold; display: block; margin-bottom: 4px; color: #333333;">🎫 상품 선택:</label>' +
-                    '<select id="gys-program-select" style="width: 100%; height: 38px; padding: 6px 8px; border: 1px solid #cccccc; border-radius: 4px; font-size: 13px; font-weight: bold; line-height: 1.4;">' +
-                        programOptionsHtml +
-                    '</select>' +
+                '<div style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 6px; margin-bottom: 12px;">' +
+                    '<div>' +
+                        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">' +
+                            '<label style="font-size: 11px; font-weight: bold; color: #333333;">⏰ 시간대:</label>' +
+                            '<button id="gys-refresh-time-btn" title="시간대 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
+                        '</div>' +
+                        '<select id="gys-time-select" style="width: 100%; height: 36px; padding: 4px 8px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11.5px; font-weight: bold; line-height: 1.3;">' +
+                            timeOptionsHtml +
+                        '</select>' +
+                    '</div>' +
+                    '<div>' +
+                        '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">' +
+                            '<label style="font-size: 11px; font-weight: bold; color: #333333;">🎫 상품 선택:</label>' +
+                            '<button id="gys-refresh-program-btn" title="상품 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
+                        '</div>' +
+                        '<select id="gys-program-select" style="width: 100%; height: 36px; padding: 4px 8px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11.5px; font-weight: bold; line-height: 1.3;">' +
+                            programOptionsHtml +
+                        '</select>' +
+                    '</div>' +
                 '</div>' +
                 '<hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 10px 0;">' +
                 '<div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box;">' +
@@ -442,43 +483,65 @@
             const container = document.getElementById('container') || document.body;
             container.appendChild(panel);
 
-            async function updateProgramSelectOptions(targetDate) {
+            // 1. 상품 목록만 독립 갱신
+            async function updateProgramSelectOptions(targetDate, isManualClick) {
+                if (typeof isManualClick === 'undefined') isManualClick = false;
+
+                const isLogged = (typeof win.ISLOGIN !== 'undefined') ? win.ISLOGIN : false;
+                const memNo = (typeof win.MEM_NO !== 'undefined') ? win.MEM_NO : '';
+
+                if ((!isLogged || !memNo) && isManualClick) {
+                    alert('상품 목록을 변경/조회하려면 로그인이 필요합니다.');
+                    handleAutoLoginRedirect();
+                    return;
+                }
+
                 const programSelectEl = document.getElementById('gys-program-select');
                 if (!programSelectEl) return;
 
+                const currentVal = programSelectEl.value || safeLocal.get('gys_saved_program_cd') || "I000221";
                 const dynamicItems = await fetchItemList(targetDate);
                 const listToUse = dynamicItems || PROGRAM_LIST;
 
-                programSelectEl.innerHTML = '';
+                const fragment = document.createDocumentFragment();
                 listToUse.forEach(function(p) {
                     const option = document.createElement('option');
                     const code = p.item_cd || p.item_code;
-                    const name = p.item_nm || p.item_name;
+                    const rawName = p.item_nm || p.item_name;
+                    const name = formatProgramName(rawName);
                     const price = p.sale_amt !== undefined ? p.sale_amt : p.price;
 
                     option.value = code;
                     option.textContent = name + ' (' + price.toLocaleString() + '원)';
-                    if (code === "I000221") option.selected = true;
-                    programSelectEl.appendChild(option);
+                    if (code === currentVal) option.selected = true;
+                    fragment.appendChild(option);
                 });
+
+                programSelectEl.replaceChildren(fragment);
             }
 
+            // 2. 시간대 목록만 독립 갱신
             async function updateTimeSelectOptions(targetDate) {
                 const selectEl = document.getElementById('gys-time-select');
+                if (!selectEl) return;
+
+                const currentVal = selectEl.value || safeLocal.get('gys_saved_time_seq') || "15";
                 const timeData = await fetchTimeSlots(targetDate);
 
                 if (timeData && Array.isArray(timeData) && timeData.length > 0) {
-                    selectEl.innerHTML = '';
+                    const fragment = document.createDocumentFragment();
                     timeData.forEach(function(item) {
                         const option = document.createElement('option');
                         option.value = item.seq;
                         option.textContent = item.time_nm + ' | ' + item.timep;
-                        if (item.seq === 15) option.selected = true;
-                        selectEl.appendChild(option);
+                        if (String(item.seq) === String(currentVal)) option.selected = true;
+                        fragment.appendChild(option);
                     });
+                    selectEl.replaceChildren(fragment);
                 }
             }
 
+            // 3. 달력 전체 갱신
             async function loadDateList() {
                 const inputEl = document.getElementById('gys-ym-input');
                 const ymValue = inputEl.value.trim();
@@ -490,7 +553,7 @@
                 const firstDayOfMonth = ymValue + '01';
 
                 await updateTimeSelectOptions(firstDayOfMonth);
-                await updateProgramSelectOptions(firstDayOfMonth);
+                await updateProgramSelectOptions(firstDayOfMonth, false);
 
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
@@ -557,7 +620,7 @@
                         closedCell.innerHTML = '' +
                             '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
                             '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; font-weight: bold; line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
-
+                        
                         Object.assign(closedCell.style, {
                             height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
                             boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%'
@@ -598,7 +661,7 @@
                         if (isSuccess) {
                             let count = parseInt(dateBtn.dataset.count, 10) + 1;
                             dateBtn.dataset.count = count.toString();
-
+                            
                             dateBtn.querySelector('.gys-count-badge').textContent = '(' + count + ')';
                             dateBtn.style.backgroundColor = '#d4edda';
                             dateBtn.style.borderColor = '#28a745';
@@ -627,7 +690,19 @@
                 }
             }
 
-            document.getElementById('gys-fetch-btn').addEventListener('click', loadDateList);
+            // 이벤트 리스너 바인딩
+            document.getElementById('gys-fetch-btn').addEventListener('click', loadDateList); // 달력 재조회
+            
+            document.getElementById('gys-refresh-time-btn').addEventListener('click', function() { // 시간대 단독 갱신
+                const ymValue = document.getElementById('gys-ym-input').value.trim();
+                updateTimeSelectOptions(ymValue + '01');
+            });
+
+            document.getElementById('gys-refresh-program-btn').addEventListener('click', function() { // 상품 단독 갱신
+                const ymValue = document.getElementById('gys-ym-input').value.trim();
+                updateProgramSelectOptions(ymValue + '01', true);
+            });
+
             document.getElementById('gys-prev-month-btn').addEventListener('click', function() {
                 const ymInput = document.getElementById('gys-ym-input');
                 ymInput.value = addMonthsToYM(ymInput.value.trim(), -1);
@@ -653,7 +728,7 @@
                 await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true);
             } else {
                 const isPureMainPage = Array.from(urlParams.keys()).length === 0;
-
+                
                 if (isPureMainPage) {
                     createCustomPanel();
                 } else {

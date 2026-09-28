@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      8.3
-// @description  문자열 이스케이프 구문오류(SyntaxError) 완전 제거 및 안전한 DOM 생성 적용
+// @version      8.4
+// @description  파이어폭스 첫 번째 링크/클릭 예약 실패 방지 (세션쿠키 보장 및 자동 1회 재시도 적용)
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -185,8 +185,10 @@
             document.body.removeChild(form);
         }
 
-        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink) {
+        // 💡 파이어폭스 세션 안정화 및 1회 자동 재시도 적용 함수
+        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount) {
             if (typeof isAutoLink === 'undefined') isAutoLink = false;
+            if (typeof retryCount === 'undefined') retryCount = 0;
 
             return new Promise(function(resolve) {
                 var company_cd = "GYS10";
@@ -222,12 +224,31 @@
                     method: 'GET',
                     cache: false,
                     dataType: 'json',
+                    xhrFields: {
+                        withCredentials: true // 파이어폭스 세션 쿠키 강제 전송
+                    },
                     error: function(xhr, status, error) {
-                        alert('예약 요청 중 오류가 발생했습니다: ' + error);
-                        resolve(false);
+                        if (retryCount < 1) {
+                            console.log('[Quick Auto] 첫 진입 실패 감지 -> 300ms 후 자동 재시도');
+                            setTimeout(function() {
+                                custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
+                            }, 300);
+                        } else {
+                            alert('예약 요청 중 오류가 발생했습니다: ' + error);
+                            resolve(false);
+                        }
                     },
                     success: function(data) {
                         var result_cd = data.result_code;
+
+                        // 첫 번째 연결 지연으로 실패 시 1회 자동 재시도
+                        if (result_cd != 0 && retryCount < 1) {
+                            console.log('[Quick Auto] 첫 결과 코드 실패 (' + data.result_message + ') -> 300ms 후 자동 재시도');
+                            setTimeout(function() {
+                                custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve);
+                            }, 300);
+                            return;
+                        }
 
                         if (result_cd != 0) {
                             alert(data.result_message || '예약에 실패했습니다.');
@@ -252,7 +273,7 @@
         async function fetchMonthStateList(yearMonth) {
             const url = '/rest/dailyuse/mon_state_list?company_code=GYS10&part_code=03&resve_mon=' + yearMonth + '&_=' + Date.now();
             try {
-                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
                 if (!res.ok) throw new Error('HTTP Error ' + res.status);
                 return await res.json();
             } catch (err) {
@@ -263,7 +284,7 @@
         async function fetchTimeSlots(targetDate) {
             const url = '/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=' + targetDate + '&_=' + Date.now();
             try {
-                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
                 if (!res.ok) throw new Error('HTTP Error ' + res.status);
                 return await res.json();
             } catch (err) {
@@ -279,7 +300,7 @@
 
             const url = '/rest/dailyuse/item_list?company_code=GYS10&resve_part_code=03&resve_date=' + targetDate + '&member_code=' + memNo + '&_=' + Date.now();
             try {
-                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } });
+                const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' }, credentials: 'include' });
                 if (!res.ok) throw new Error('HTTP Error ' + res.status);
                 const data = await res.json();
                 if (Array.isArray(data) && data.length > 0) return data;

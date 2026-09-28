@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
 // @namespace    http://tampermonkey.net/
-// @version      0.9.7
-// @description  Quick 예약, 스마트폰 가로 모드(Landscape) 레이아웃/높이 컴팩트 최적화 및 터치 면적 최대화
+// @version      0.9.6
+// @description  Quick 예약, 상단 조회 세트와 시간대/상품 콤보박스 세트 가로 너비 일치 및 레이아웃 통일감 개선
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -368,20 +368,6 @@
                     'max-width: 500px !important;' +
                     'box-sizing: border-box !important;' +
                 '}' +
-                /* [추가] 스마트폰/모바일 가로 모드 (Landscape) 스타일 최적화 */ +
-                '@media all and (max-height: 500px) and (orientation: landscape) {' +
-                    '#gys-custom-panel {' +
-                        'padding: 4px 2px !important;' +
-                        'margin: 5px auto !important;' +
-                    '}' +
-                    '.gys-panel-title { font-size: 13px !important; margin-bottom: 4px !important; padding-bottom: 2px !important; }' +
-                    '.gys-control-row { margin-bottom: 4px !important; }' +
-                    '.gys-select-box { height: 28px !important; font-size: 10.5px !important; }' +
-                    '.gys-cell-btn { height: 44px !important; }' +
-                    '.gys-day-number { font-size: 11px !important; top: 2px !important; }' +
-                    '.gys-count-badge { font-size: 10px !important; top: 15px !important; }' +
-                    '.gys-state-text { font-size: 8.5px !important; bottom: 2px !important; height: 20px !important; }' +
-                '}' +
                 '@media (min-width: 769px) {' +
                     'body, #header, header, #container, .alignbox, #section, footer {' +
                         'margin-left: 0 !important;' +
@@ -400,7 +386,7 @@
                         'right: 10px !important;' +
                         'margin: 0 !important;' +
                         'width: 440px !important;' +
-                        'max-height: 92vh !important;' +
+                        'max-height: 90vh !important;' +
                         'overflow-y: auto !important;' +
                         'z-index: 999999 !important;' +
                     '}' +
@@ -454,10 +440,11 @@
             }).join('');
 
             panel.innerHTML = '' +
-                '<div class="gys-panel-title" style="font-weight: bold; font-size: 15px; margin-bottom: 8px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 4px; padding-left: 4px;">' +
+                '<div style="font-weight: bold; font-size: 15px; margin-bottom: 8px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 4px; padding-left: 4px;">' +
                     '⛳ 성저파크골프장 Quick 예약' +
                 '</div>' +
-                '<div class="gys-control-row" style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
+                // [수정] 상단 조회 세트 레이아웃을 4.2fr 5.8fr 비율로 하단 콤보박스와 가로 폭 일치
+                '<div style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
                     '<div style="display: flex; gap: 3px; align-items: center;">' +
                         '<button id="gys-prev-month-btn" title="이전 달" style="padding: 6px 8px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; flex: 0 0 auto;">◀</button>' +
                         '<input type="text" id="gys-ym-input" placeholder="YYYYMM" value="' + defaultYM + '" style="flex: 1; min-width: 0; width: 100%; padding: 5px 2px; border: 1px solid #cccccc; border-radius: 4px; text-align: center; font-weight: bold; font-size: 14px; box-sizing: border-box;">' +
@@ -467,13 +454,13 @@
                         '<button id="gys-fetch-btn" title="달력 데이터 조회/새로고침" style="width: 100%; height: 32px; background-color: #1969c5; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13.5px; box-sizing: border-box;">🔍 조회</button>' +
                     '</div>' +
                 '</div>' +
-                '<div class="gys-control-row" style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
+                '<div style="display: grid; grid-template-columns: 4.2fr 5.8fr; gap: 4px; margin-bottom: 8px; padding: 0 2px;">' +
                     '<div>' +
                         '<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">' +
                             '<label style="font-size: 11px; font-weight: bold; color: #333333;">⏰ 시간대:</label>' +
                             '<button id="gys-refresh-time-btn" title="시간대 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
                         '</div>' +
-                        '<select id="gys-time-select" class="gys-select-box" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
+                        '<select id="gys-time-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
                             timeOptionsHtml +
                         '</select>' +
                     '</div>' +
@@ -482,14 +469,14 @@
                             '<label style="font-size: 11px; font-weight: bold; color: #333333;">🎫 상품 선택:</label>' +
                             '<button id="gys-refresh-program-btn" title="상품 목록만 갱신" style="padding: 1px 4px; background-color: #f8f9fa; border: 1px solid #ced4da; border-radius: 3px; cursor: pointer; font-size: 10px;">🔄</button>' +
                         '</div>' +
-                        '<select id="gys-program-select" class="gys-select-box" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
+                        '<select id="gys-program-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; line-height: 1.3;">' +
                             programOptionsHtml +
                         '</select>' +
                     '</div>' +
                 '</div>' +
-                '<hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 6px 0;">' +
+                '<hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 8px 0;">' +
                 '<div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box;">' +
-                    '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-weight: bold; font-size: 12.5px; margin-bottom: 4px; background-color: #f1f3f5; padding: 3px 0; border-radius: 4px;">' +
+                    '<div style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; text-align: center; font-weight: bold; font-size: 12.5px; margin-bottom: 4px; background-color: #f1f3f5; padding: 4px 0; border-radius: 4px;">' +
                         '<span style="color: #d9534f;">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span style="color: #0275d8;">토</span>' +
                     '</div>' +
                     '<div id="gys-date-buttons-container" style="display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; width: 100%; box-sizing: border-box;">' +
@@ -596,8 +583,7 @@
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
                     const prevBtn = document.createElement('button');
                     prevBtn.disabled = true;
-                    prevBtn.className = 'gys-cell-btn';
-                    prevBtn.innerHTML = '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
+                    prevBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
 
                     Object.assign(prevBtn.style, {
                         height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
@@ -641,10 +627,9 @@
                     if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
-                        closedBtn.className = 'gys-cell-btn';
                         closedBtn.innerHTML = '' +
-                            '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
-                            '<div class="gys-state-text" style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
+                            '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
+                            '<div style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
                         
                         Object.assign(closedBtn.style, {
                             height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
@@ -657,14 +642,14 @@
 
                     // --- 예약 가능 / 마감 날짜 버튼 처리 ---
                     const dateBtn = document.createElement('button');
-                    dateBtn.className = 'gys-dynamic-date-btn gys-cell-btn';
+                    dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.baseDay = '' + dayNum;
                     dateBtn.dataset.count = "0";
 
                     dateBtn.innerHTML = '' +
                         '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
                         '<div class="gys-count-badge" style="position: absolute; top: 20px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
-                        '<div class="gys-state-text" style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
+                        '<div style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
                             stateText +
                         '</div>';
 
@@ -708,8 +693,7 @@
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
                     const nextBtn = document.createElement('button');
                     nextBtn.disabled = true;
-                    nextBtn.className = 'gys-cell-btn';
-                    nextBtn.innerHTML = '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
+                    nextBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
 
                     Object.assign(nextBtn.style, {
                         height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',

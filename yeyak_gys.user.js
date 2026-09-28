@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
 // @namespace    http://tampermonkey.net/
-// @version      0.9.2
-// @description  Quick 예약, 예약가능만 bold 처리, 비활성화 셀 pointer-events 차단, 선택값 자동 저장, 모바일 완벽 호환
+// @version      0.9.3
+// @description  Quick 예약, 비활성화 셀 button disabled 처리 및 클릭 전파 완전 차단, 예약가능만 bold 강조, 선택값 저장
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -572,18 +572,29 @@
                     return parseInt(parts[0], 10) === curYear && parseInt(parts[1], 10) === (curMonth + 1);
                 });
 
-                // --- 이전 달 비활성화 셀 처리 ---
+                // 비활성화 전용 이벤트를 거르는 헬퍼 함수
+                function disableEventBlocker(e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (e.stopImmediatePropagation) e.stopImmediatePropagation();
+                    return false;
+                }
+
+                // --- 이전 달 비활성화 셀 처리 (button disabled로 완전 차단) ---
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
-                    const prevCell = document.createElement('div');
-                    prevCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + (prevMonthLastDay - i) + '</div>';
+                    const prevBtn = document.createElement('button');
+                    prevBtn.disabled = true;
+                    prevBtn.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + (prevMonthLastDay - i) + '</div>';
 
-                    Object.assign(prevCell.style, {
+                    Object.assign(prevBtn.style, {
                         height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                     });
-                    btnContainer.appendChild(prevCell);
+
+                    prevBtn.addEventListener('click', disableEventBlocker, true);
+                    btnContainer.appendChild(prevBtn);
                 }
 
                 currentMonthItems.forEach(function(item) {
@@ -617,24 +628,21 @@
 
                     const fontWeightStyle = isAvailable ? 'font-weight: bold;' : 'font-weight: normal;';
 
-                    // --- 휴관일 및 사유(close_advice)가 있는 비활성화 셀 처리 ---
+                    // --- 휴관일 및 사유(close_advice)가 있는 비활성화 셀 처리 (button disabled 적용) ---
                     if (hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
-                        const closedCell = document.createElement('div');
-                        closedCell.innerHTML = '' +
+                        const closedBtn = document.createElement('button');
+                        closedBtn.disabled = true;
+                        closedBtn.innerHTML = '' +
                             '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
                             '<div style="position: absolute; bottom: 4px; left: 2px; right: 2px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center; pointer-events: none;">' + stateText + '</div>';
                         
-                        Object.assign(closedCell.style, {
+                        Object.assign(closedBtn.style, {
                             height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
                             boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                         });
 
-                        closedCell.addEventListener('click', function(e) {
-                            e.stopPropagation();
-                            e.preventDefault();
-                        });
-
-                        btnContainer.appendChild(closedCell);
+                        closedBtn.addEventListener('click', disableEventBlocker, true);
+                        btnContainer.appendChild(closedBtn);
                         return;
                     }
 
@@ -685,18 +693,21 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
-                // --- 다음 달 비활성화 셀 처리 ---
+                // --- 다음 달 비활성화 셀 처리 (button disabled 적용) ---
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
-                    const nextCell = document.createElement('div');
-                    nextCell.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + nextDayNum + '</div>';
+                    const nextBtn = document.createElement('button');
+                    nextBtn.disabled = true;
+                    nextBtn.innerHTML = '<div style="position: absolute; top: 5px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1; pointer-events: none;">' + nextDayNum + '</div>';
 
-                    Object.assign(nextCell.style, {
+                    Object.assign(nextBtn.style, {
                         height: '62px', backgroundColor: '#f8f9fa', borderRadius: '4px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', pointerEvents: 'none'
                     });
-                    btnContainer.appendChild(nextCell);
+
+                    nextBtn.addEventListener('click', disableEventBlocker, true);
+                    btnContainer.appendChild(nextBtn);
                 }
             }
 

@@ -1,7 +1,7 @@
 // ==UserScript==
-// @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바 (최종 완결판)
+// @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.6
+// @version      0.9.7
 // @description  Quick 예약, 상단 조회 세트와 시간대/상품 콤보박스 세트 가로 너비 일치 및 레이아웃 통일감 개선
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102

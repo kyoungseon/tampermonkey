@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.20
-// @description  Quick 예약, 좌우 여백 크기 복원 및 모바일 상/하단 스크롤 마진 적용
+// @version      0.9.22
+// @description  Quick 예약, 기준일 자동 선택 시 화요일 제외 로직 추가 및 스크롤 최적화
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -425,7 +425,7 @@
             style.textContent = '' +
                 '#gys-custom-panel {' +
                     'position: static !important;' +
-                    'margin: 15px auto 130px auto !important;' + // 상단 15px, 하단 약 2주 높이(130px) 여백
+                    'margin: 15px auto 130px auto !important;' +
                     'width: 99% !important;' +
                     'max-width: 500px !important;' +
                     'box-sizing: border-box !important;' +
@@ -474,7 +474,7 @@
                 backgroundColor: '#ffffff',
                 border: '2px solid #1969c5',
                 borderRadius: '8px',
-                padding: '8px 4px', // 기존 타이트한 패딩 복원
+                padding: '8px 4px',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 fontFamily: 'Malgun Gothic, sans-serif',
                 boxSizing: 'border-box'
@@ -626,14 +626,17 @@
                     return parseInt(parts[0], 10) === curYear && parseInt(parts[1], 10) === (curMonth + 1);
                 });
 
-                // --- 1일부터 탐색하여 첫 영업일(비휴무일) 찾기 ---
+                // --- 1일부터 탐색하여 첫 영업일(비휴무일 & 화요일 제외) 찾기 ---
                 let firstWorkDateHyphen = "";
                 for (let i = 0; i < currentMonthItems.length; i++) {
                     const item = currentMonthItems[i];
+                    const itemDayOfWeek = new Date(item.date).getDay(); // 0: 일, 1: 월, 2: 화, ...
+                    
                     const hasClose = item.close_advice && item.close_advice.trim() !== '';
                     const stateText = hasClose ? item.close_advice.trim() : (item.state_nm || '');
                     
-                    const isClosed = hasClose || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1;
+                    // 화요일(2) 이거나 휴관/대회 등 영업 불가능일 경우 제외
+                    const isClosed = itemDayOfWeek === 2 || hasClose || item.state_cd === "30" || stateText.indexOf('휴관') !== -1 || stateText.indexOf('대회') !== -1;
                     if (!isClosed) {
                         firstWorkDateHyphen = item.date; // YYYY-MM-DD
                         break;
@@ -660,7 +663,7 @@
 
                 btnContainer.innerHTML = '';
 
-                // --- 이전 달 비활성화 셀 처리 ---
+                // --- 이전 달 비활성화 셀 처리 (높이 64px) ---
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
@@ -669,7 +672,7 @@
                     prevBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + (prevMonthLastDay - i) + '</div>';
 
                     Object.assign(prevBtn.style, {
-                        height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                        height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                     });
                     btnContainer.appendChild(prevBtn);
@@ -709,16 +712,16 @@
 
                     const fontWeightStyle = isAvailable ? 'font-weight: bold;' : 'font-weight: normal;';
 
-                    // --- 비활성화 버튼 처리 (과거일 / 휴관일 / 사유 존재 등) ---
+                    // --- 비활성화 버튼 처리 (높이 64px) ---
                     if (isPastDay || hasCloseAdvice || item.state_cd === "30" || stateText.indexOf('휴관') !== -1) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
                         closedBtn.innerHTML = '' +
                             '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + (isPastDay ? '#ced4da' : textColor) + '; text-align: center; line-height: 1;">' + dayNum + '</div>' +
-                            '<div style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
+                            '<div style="position: absolute; bottom: 4px; left: 1px; right: 1px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 9px; color: ' + stateColor + '; ' + fontWeightStyle + ' line-height: 1.1; word-break: keep-all; text-align: center;">' + stateText + '</div>';
                         
                         Object.assign(closedBtn.style, {
-                            height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                            height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                             boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                         });
 
@@ -726,7 +729,7 @@
                         return;
                     }
 
-                    // --- 클릭 가능한 일반 날짜 버튼 처리 ---
+                    // --- 클릭 가능한 일반 날짜 버튼 처리 (높이 64px) ---
                     const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.baseDay = '' + dayNum;
@@ -734,13 +737,13 @@
 
                     dateBtn.innerHTML = '' +
                         '<div class="gys-day-number" style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1; pointer-events: none;">' + dayNum + '</div>' +
-                        '<div class="gys-count-badge" style="position: absolute; top: 20px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
-                        '<div style="position: absolute; bottom: 3px; left: 1px; right: 1px; height: 26px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
+                        '<div class="gys-count-badge" style="position: absolute; top: 22px; left: 0; right: 0; font-size: 11px; font-weight: bold; color: #28a745; text-align: center; line-height: 1; pointer-events: none;"></div>' +
+                        '<div style="position: absolute; bottom: 4px; left: 1px; right: 1px; height: 28px; display: flex; align-items: center; justify-content: center; font-size: 10px; color: ' + stateColor + '; ' + fontWeightStyle + ' text-align: center; line-height: 1.1; word-break: keep-all; pointer-events: none;">' +
                             stateText +
                         '</div>';
 
                     Object.assign(dateBtn.style, {
-                        height: '58px', backgroundColor: '#ffffff', border: '1px solid #d0d0d0', borderRadius: '3px',
+                        height: '64px', backgroundColor: '#ffffff', border: '1px solid #d0d0d0', borderRadius: '3px',
                         cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.15s', position: 'relative', width: '100%', padding: '0'
                     });
 
@@ -778,7 +781,7 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
-                // --- 다음 달 비활성화 셀 처리 ---
+                // --- 다음 달 비활성화 셀 처리 (높이 64px) ---
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
@@ -787,7 +790,7 @@
                     nextBtn.innerHTML = '<div style="position: absolute; top: 4px; left: 0; right: 0; font-size: 13px; font-weight: bold; color: #ced4da; text-align: center; line-height: 1;">' + nextDayNum + '</div>';
 
                     Object.assign(nextBtn.style, {
-                        height: '58px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
+                        height: '64px', backgroundColor: '#f8f9fa', borderRadius: '3px', border: '1px solid #e9ecef',
                         boxSizing: 'border-box', cursor: 'not-allowed', position: 'relative', width: '100%', padding: '0', userSelect: 'none'
                     });
                     btnContainer.appendChild(nextBtn);

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      0.9.16
-// @description  Quick 예약, 상품 목록 기본값 지정 복원 및 최초 다음달 로딩
+// @version      0.9.20
+// @description  Quick 예약, 좌우 여백 크기 복원 및 모바일 상/하단 스크롤 마진 적용
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -404,6 +404,20 @@
             return targetYM;
         }
 
+        // 패널 상단으로 화면 스크롤 보정 (상단 여백 20px 적용)
+        function scrollToPanelTop() {
+            const panel = document.getElementById('gys-custom-panel');
+            if (!panel) return;
+            
+            const rect = panel.getBoundingClientRect();
+            const offsetTop = window.pageYOffset + rect.top - 20;
+            
+            window.scrollTo({
+                top: Math.max(0, offsetTop),
+                behavior: 'smooth'
+            });
+        }
+
         function applyResponsiveStyles() {
             if (document.getElementById('gys-responsive-style')) return;
             const style = document.createElement('style');
@@ -411,7 +425,7 @@
             style.textContent = '' +
                 '#gys-custom-panel {' +
                     'position: static !important;' +
-                    'margin: 10px auto 30px auto !important;' +
+                    'margin: 15px auto 130px auto !important;' + // 상단 15px, 하단 약 2주 높이(130px) 여백
                     'width: 99% !important;' +
                     'max-width: 500px !important;' +
                     'box-sizing: border-box !important;' +
@@ -460,7 +474,7 @@
                 backgroundColor: '#ffffff',
                 border: '2px solid #1969c5',
                 borderRadius: '8px',
-                padding: '8px 4px',
+                padding: '8px 4px', // 기존 타이트한 패딩 복원
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 fontFamily: 'Malgun Gothic, sans-serif',
                 boxSizing: 'border-box'
@@ -472,13 +486,13 @@
                 '</div>' +
                 // 상단 레이아웃: [달 선택(다음달 기본)] | [기준일 선택(톤다운)]
                 '<div style="display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 6px; padding: 0 2px;">' +
-                    // 달 선택 영역 (다음 달 기본 세팅)
+                    // 달 선택 영역
                     '<div style="display: flex; gap: 3px; align-items: center;">' +
                         '<button id="gys-prev-month-btn" title="이전 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">◀</button>' +
                         '<button id="gys-ym-reload-btn" title="클릭 시 현재 선택 달 재조회" style="width: 96px; height: 32px; border: 1.5px solid #1969c5; border-radius: 4px; text-align: center; font-weight: bold; font-size: 14.5px; background-color: #e8f4ff; color: #1969c5; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; justify-content: center;">' + defaultYMDot + '</button>' +
                         '<button id="gys-next-month-btn" title="다음 달" style="width: 42px; height: 32px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 13px; text-align: center; display: flex; align-items: center; justify-content: center;">▶</button>' +
                     '</div>' +
-                    // 기준일 선택 영역 (톤다운)
+                    // 기준일 선택 영역
                     '<div style="display: flex; align-items: center; gap: 3px;">' +
                         '<span style="font-size: 10.5px; font-weight: normal; color: #777777; white-space: nowrap;">기준일:</span>' +
                         '<input type="date" id="gys-base-date-input" value="' + todayHyphen + '" min="' + todayHyphen + '" style="width: 108px; height: 26px; padding: 1px 2px; border: 1px solid #e0e0e0; border-radius: 4px; font-size: 10.5px; font-weight: normal; color: #555555; background-color: #f8f9fa; text-align: center; box-sizing: border-box;">' +
@@ -598,6 +612,7 @@
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
                     btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #d9534f; text-align: center; padding: 15px 0;">조회된 날짜 데이터가 없습니다.</div>';
+                    scrollToPanelTop();
                     return;
                 }
 
@@ -777,6 +792,9 @@
                     });
                     btnContainer.appendChild(nextBtn);
                 }
+
+                // 조회 완료 후 패널 상단 스크롤
+                scrollToPanelTop();
             }
 
             // 이벤트 리스너 바인딩
@@ -791,6 +809,7 @@
             document.getElementById('gys-refresh-options-btn').addEventListener('click', function() {
                 const targetDate = document.getElementById('gys-base-date-input').value;
                 updateAllOptions(targetDate, true);
+                scrollToPanelTop();
             });
             document.getElementById('gys-base-date-input').addEventListener('change', function() {
                 const todayHyphen = getTodayYMDHyphen();
@@ -799,6 +818,7 @@
                     this.value = todayHyphen;
                 }
                 updateAllOptions(this.value, false);
+                scrollToPanelTop();
             });
 
             // 이전/다음 달 버튼 클릭 시 처리

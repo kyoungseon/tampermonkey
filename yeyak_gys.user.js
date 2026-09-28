@@ -1,9 +1,8 @@
-
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      5.3
-// @description  월/일자 파라미터 규격 완전 보정 및 회원 ID 연동
+// @version      6.2
+// @description  autologin 수동 패널 열기 버튼 추가 및 결제 페이지 자동 체크/결제 제출 준비
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -18,16 +17,52 @@
     const currentPath = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
 
-    // -------------------------------------------------------------
-    // 💡 [예외 처리] 결제 진행 페이지(?action=write) 스크립트 비활성화
-    // -------------------------------------------------------------
+    // =============================================================
+    // [PART A] 결제 진행 페이지 (?action=write) 처리
+    // =============================================================
     if (urlParams.get('action') === 'write') {
-        console.log('[Quick Auto] 결제/결제완료 화면입니다. 예약 스크립트를 끕니다.');
-        return;
+        console.log('[Quick Auto] 결제/신청 진행 화면에 진입했습니다.');
+
+        // 💡 추후 보내주실 소스의 선택자(Selector)를 지정할 곳입니다.
+        const PAY_CONFIG = {
+            CHECKBOX_SELECTOR: 'input[type="checkbox"]', // 동의 체크박스들
+            PAY_BUTTON_SELECTOR: '#btn_pay, .btn_pay, button[type="submit"]', // 결제/예약 제출 버튼
+            DELAY_MS: 300 // 로딩 후 클릭 대기시간 (ms)
+        };
+
+        function handlePaymentPageLogic() {
+            setTimeout(() => {
+                // 1) 체크박스 자동 선택
+                const checkboxes = document.querySelectorAll(PAY_CONFIG.CHECKBOX_SELECTOR);
+                if (checkboxes.length > 0) {
+                    checkboxes.forEach(cb => {
+                        if (!cb.checked) {
+                            cb.checked = true;
+                            cb.dispatchEvent(new Event('change', { bubbles: true }));
+                        }
+                    });
+                }
+
+                // 2) 결제/예약 신청 버튼 자동 클릭
+                const payBtn = document.querySelector(PAY_CONFIG.PAY_BUTTON_SELECTOR);
+                if (payBtn) {
+                    console.log('[Quick Auto] 결제 버튼을 자동으로 누릅니다.');
+                    payBtn.click();
+                }
+            }, PAY_CONFIG.DELAY_MS);
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', handlePaymentPageLogic);
+        } else {
+            handlePaymentPageLogic();
+        }
+
+        return; // 결제 페이지에서는 아래 예약 메인 로직 실행 안 함
     }
 
     // =============================================================
-    // [PART A] 로그인 페이지 (/fmcs/27) 처리
+    // [PART B] 로그인 페이지 (/fmcs/27) 처리
     // =============================================================
     if (currentPath === '/fmcs/27') {
         const rawReferer = urlParams.get('referer');
@@ -54,7 +89,7 @@
         }
     } 
     // =============================================================
-    // [PART B] 예약 메인 페이지 (/fmcs/102) 처리
+    // [PART C] 예약 메인 페이지 (/fmcs/102) 처리
     // =============================================================
     else if (currentPath === '/fmcs/102') {
         const isAutoLoginRequested = urlParams.get('autologin') === 'true';
@@ -87,8 +122,8 @@
             {"item_nm":"온라인 관외할증(군인/청소년)","sale_amt":3300,"item_cd":"I000226"}
         ];
 
-        // [1] 데이터 통신 및 예약 신청 함수 (타임스탬프 적용)
-        function custom_set_ticket_resve(resve_date, time_seq, program_code) {
+        // [1] 데이터 통신 및 예약 신청 함수 (isAutoLink 여부에 따라 탭 분기)
+        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
             return new Promise((resolve) => {
                 var company_cd = "GYS10";
                 var target_program_code = program_code || "I000221";
@@ -100,6 +135,12 @@
                 }
 
                 var member_number = typeof MEM_NO !== 'undefined' ? MEM_NO : '';
+
+                // 패널 터치 시에만 미리 새 탭 개설 (autologin 호출 시에는 현재 창 이동)
+                var payTab = null;
+                if (!isAutoLink) {
+                    payTab = window.open('about:blank', '_blank');
+                }
 
                 $.ajax({
                     url: "/rest/dailyuse/set_ticket_resve",
@@ -117,6 +158,7 @@
                     cache: false,
                     dataType: 'json',
                     error: function(xhr, status, error) {
+                        if (payTab) payTab.close();
                         alert('예약 요청 중 오류가 발생했습니다: ' + error);
                         resolve(false);
                     },
@@ -124,22 +166,26 @@
                         var result_cd = data.result_code;
 
                         if (result_cd != 0) {
+                            if (payTab) payTab.close();
                             alert(data.result_message || '예약에 실패했습니다.');
                             resolve(false);
                             return;
                         }
 
-                        var targetPath = (typeof location !== 'undefined' && location.pathname) ? location.pathname : '/fmcs/102';
-                        var linkUrl = (typeof WRITE_LINK_URL !== 'undefined') ? WRITE_LINK_URL : '?action=write';
-                        var targetUrl = targetPath + linkUrl + '&comcd=' + company_cd + '&resve_no=' + data.r_num;
+                        // 깔끔한 결제 URL 조립
+                        var targetUrl = `/fmcs/102?action=write&comcd=${company_cd}&resve_no=${data.r_num}`;
 
-                        var link = document.createElement('a');
-                        link.href = targetUrl;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
+                        // autologin 딥링크 접속 시 파이어폭스 팝업 경고 회피를 위해 현재 창 이동
+                        if (isAutoLink) {
+                            window.location.href = targetUrl;
+                        } else {
+                            if (payTab) {
+                                payTab.location.href = targetUrl;
+                                payTab.focus();
+                            } else {
+                                window.location.href = targetUrl;
+                            }
+                        }
                         
                         resolve(true);
                     }
@@ -148,7 +194,6 @@
         }
 
         // [2] API 호출 유틸리티
-        // 💡 1) 월 단위 달력 상태 조회 (YYYYMM)
         async function fetchMonthStateList(yearMonth) {
             const url = `/rest/dailyuse/mon_state_list?company_code=GYS10&part_code=03&resve_mon=${yearMonth}&_=${Date.now()}`;
             try {
@@ -160,7 +205,6 @@
             }
         }
 
-        // 💡 2) 일자 단위 시간대 목록 조회 (YYYYMMDD)
         async function fetchTimeSlots(targetDate) {
             const url = `/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=${targetDate}&_=${Date.now()}`;
             try {
@@ -172,7 +216,6 @@
             }
         }
 
-        // 💡 3) 일자 단위 상품 목록 조회 (YYYYMMDD + member_code)
         async function fetchItemList(targetDate) {
             const isLogged = (typeof ISLOGIN !== 'undefined') ? ISLOGIN : false;
             const memNo = (typeof MEM_NO !== 'undefined') ? MEM_NO : '';
@@ -327,7 +370,6 @@
             const container = document.getElementById('container') || document.body;
             container.appendChild(panel);
 
-            // 상품 목록 Select 업데이트 (일자 YYYYMMDD 전달)
             async function updateProgramSelectOptions(targetDate) {
                 const programSelectEl = document.getElementById('gys-program-select');
                 if (!programSelectEl) return;
@@ -349,7 +391,6 @@
                 });
             }
 
-            // 시간대 Select 업데이트 (일자 YYYYMMDD 전달)
             async function updateTimeSelectOptions(targetDate) {
                 const selectEl = document.getElementById('gys-time-select');
                 const timeData = await fetchTimeSlots(targetDate);
@@ -366,23 +407,19 @@
                 }
             }
 
-            // 💡 [핵심] 날짜 및 연관 데이터 전체 로딩
             async function loadDateList() {
                 const inputEl = document.getElementById('gys-ym-input');
-                const ymValue = inputEl.value.trim(); // YYYYMM
+                const ymValue = inputEl.value.trim();
                 if (!ymValue || ymValue.length !== 6) return;
 
                 const btnContainer = document.getElementById('gys-date-buttons-container');
                 btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #1969c5; text-align: center; padding: 15px 0;">날짜 데이터 로딩 중...</div>';
 
-                // 1) 시간대 및 상품 조회를 위해 해당 월 1일 일자 규격(YYYYMM01) 산출
                 const firstDayOfMonth = `${ymValue}01`;
 
-                // 2) 시간대와 상품 목록은 '일자(YYYYMM01)' 파라미터로 개별 호출
                 await updateTimeSelectOptions(firstDayOfMonth);
                 await updateProgramSelectOptions(firstDayOfMonth);
 
-                // 3) 달력 데이터는 '월(YYYYMM)' 파라미터로 호출
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
                     btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #d9534f; text-align: center; padding: 15px 0;">조회된 날짜 데이터가 없습니다.</div>';
@@ -401,7 +438,6 @@
                     return parseInt(parts[0], 10) === curYear && parseInt(parts[1], 10) === (curMonth + 1);
                 });
 
-                // 이전 달 빈 셀
                 const prevMonthLastDateObj = new Date(curYear, curMonth, 0);
                 const prevMonthLastDay = prevMonthLastDateObj.getDate();
                 for (let i = startDayOfWeek - 1; i >= 0; i--) {
@@ -415,7 +451,6 @@
                     btnContainer.appendChild(prevCell);
                 }
 
-                // 이번 달 날짜 버튼 생성
                 currentMonthItems.forEach(item => {
                     const rawDate = item.date;
                     const dayNum = parseInt(rawDate.split('-')[2], 10);
@@ -463,7 +498,8 @@
                         dateBtn.disabled = true;
                         dateBtn.style.backgroundColor = '#e9ecef';
 
-                        const isSuccess = await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode);
+                        // 패널 버튼 터치 시 isAutoLink = false (새 탭으로 결제창 열기)
+                        const isSuccess = await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false);
                         if (isSuccess) {
                             let count = parseInt(dateBtn.dataset.count, 10) + 1;
                             dateBtn.dataset.count = count.toString();
@@ -480,7 +516,6 @@
                     btnContainer.appendChild(dateBtn);
                 });
 
-                // 다음 달 빈 셀
                 const totalCellsSoFar = startDayOfWeek + currentMonthItems.length;
                 const remainingCells = (7 - (totalCellsSoFar % 7)) % 7;
                 for (let nextDayNum = 1; nextDayNum <= remainingCells; nextDayNum++) {
@@ -510,6 +545,38 @@
             loadDateList();
         }
 
+        // 💡 [신규 추가] autologin 시 상단 고정 "Quick 예약 패널 열기" 버튼 생성 함수
+        function createOpenPanelTriggerBtn() {
+            if (document.getElementById('gys-open-panel-trigger')) return;
+
+            const triggerBtn = document.createElement('button');
+            triggerBtn.id = 'gys-open-panel-trigger';
+            triggerBtn.innerHTML = '⛳ Quick 예약 패널 열기';
+            
+            Object.assign(triggerBtn.style, {
+                position: 'fixed',
+                top: '10px',
+                right: '10px',
+                zIndex: '999999',
+                backgroundColor: '#1969c5',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '20px',
+                padding: '8px 14px',
+                fontWeight: 'bold',
+                fontSize: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                cursor: 'pointer'
+            });
+
+            triggerBtn.addEventListener('click', () => {
+                createCustomPanel();
+                triggerBtn.style.display = 'none'; // 클릭 시 패널이 열리고 수동 버튼은 숨김
+            });
+
+            document.body.appendChild(triggerBtn);
+        }
+
         // 페이지 로드 이벤트 처리
         window.addEventListener('load', async function() {
             const resveDate = urlParams.get('resve_date');
@@ -519,13 +586,21 @@
             if (isAutoLoginRequested) {
                 if (handleAutoLoginRedirect()) return;
 
+                // 💡 autologin 시에는 패널 자동 생성을 건너뛰는 대신 수동 생성 버튼 표시
+                createOpenPanelTriggerBtn();
+
                 if (resveDate && timeSeq) {
                     console.log(`[Quick Auto] 최속 예약 신청 시작: ${resveDate}, seq:${timeSeq}`);
-                    await custom_set_ticket_resve(resveDate, timeSeq, programCd);
+                    // autologin 딥링크 접속 시 isAutoLink = true (현재 창 직접 이동)
+                    await custom_set_ticket_resve(resveDate, timeSeq, programCd, true);
+                }
+            } else {
+                // autologin이 아닐 때만 메인 패널 자동 생성
+                const isActionWrite = urlParams.get('action') === 'write';
+                if (!isActionWrite) {
+                    createCustomPanel();
                 }
             }
-
-            createCustomPanel();
         });
     }
 })();

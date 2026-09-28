@@ -1,64 +1,98 @@
 // ==UserScript==
 // @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
 // @namespace    http://tampermonkey.net/
-// @version      6.2
-// @description  autologin 수동 패널 열기 버튼 추가 및 결제 페이지 자동 체크/결제 제출 준비
+// @version      7.9
+// @description  sessionStorage 1회성 완전 삭제(Single-use) 적용으로 잔여 플래그 오동작 방지
 // @author       You
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
 // @match        https://yeyak.gys.or.kr/fmcs/27*
 // @updateURL    https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys.user.js
 // @downloadURL  https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys.user.js
-// @grant        none
+// @grant        window.close
 // ==/UserScript==
 (function() {
     'use strict';
 
     const currentPath = window.location.pathname;
     const urlParams = new URLSearchParams(window.location.search);
+    const actionParam = urlParams.get('action');
+    const isFromPanelParam = urlParams.get('from_panel') === 'true';
 
     // =============================================================
-    // [PART A] 결제 진행 페이지 (?action=write) 처리
+    // [PART A] 결제 진행 및 결과 페이지 (action 파라미터 존재 시)
     // =============================================================
-    if (urlParams.get('action') === 'write') {
-        console.log('[Quick Auto] 결제/신청 진행 화면에 진입했습니다.');
+    if (actionParam) {
+        console.log('[Quick Auto] 특수 상태 페이지 진입 (action:', actionParam, ')');
 
-        // 💡 추후 보내주실 소스의 선택자(Selector)를 지정할 곳입니다.
-        const PAY_CONFIG = {
-            CHECKBOX_SELECTOR: 'input[type="checkbox"]', // 동의 체크박스들
-            PAY_BUTTON_SELECTOR: '#btn_pay, .btn_pay, button[type="submit"]', // 결제/예약 제출 버튼
-            DELAY_MS: 300 // 로딩 후 클릭 대기시간 (ms)
-        };
+        // URL 파라미터 또는 세션 메모리에 패널 진입 플래그가 있는지 확인
+        const isQuickAutoTab = isFromPanelParam || sessionStorage.getItem('gys_quick_auto') === 'true';
 
-        function handlePaymentPageLogic() {
-            setTimeout(() => {
-                // 1) 체크박스 자동 선택
-                const checkboxes = document.querySelectorAll(PAY_CONFIG.CHECKBOX_SELECTOR);
-                if (checkboxes.length > 0) {
-                    checkboxes.forEach(cb => {
-                        if (!cb.checked) {
-                            cb.checked = true;
-                            cb.dispatchEvent(new Event('change', { bubbles: true }));
+        // 1. 결제 완료 영수증 화면 (action=reg_read) 처리
+        if (actionParam === 'reg_read') {
+            if (isQuickAutoTab) {
+                // 💡 [핵심] 진입 즉시 세션 스토리지를 삭제하여 재사용/재진입 시 오동작 방지
+                sessionStorage.removeItem('gys_quick_auto');
+
+                function handleRegReadConfirm() {
+                    setTimeout(() => {
+                        const isConfirmed = confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?");
+                        if (isConfirmed) {
+                            console.log('[Quick Auto] 사용자가 탭 닫기를 선택했습니다.');
+                            window.close();
+                        } else {
+                            console.log('[Quick Auto] 사용자가 영수증 확인을 선택하여 화면을 유지합니다.');
                         }
-                    });
+                    }, 350);
                 }
 
-                // 2) 결제/예약 신청 버튼 자동 클릭
-                const payBtn = document.querySelector(PAY_CONFIG.PAY_BUTTON_SELECTOR);
-                if (payBtn) {
-                    console.log('[Quick Auto] 결제 버튼을 자동으로 누릅니다.');
-                    payBtn.click();
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
+                } else {
+                    handleRegReadConfirm();
                 }
-            }, PAY_CONFIG.DELAY_MS);
+            } else {
+                console.log('[Quick Auto] 일반 경로 진입 영수증 화면이므로 컨펌창을 띄우지 않습니다.');
+            }
+            return;
         }
 
-        if (document.readyState === 'loading') {
-            document.addEventListener('DOMContentLoaded', handlePaymentPageLogic);
-        } else {
-            handlePaymentPageLogic();
+        // 2. 결제 진행 화면 (action=write) 처리
+        if (actionParam === 'write') {
+            if (isFromPanelParam) {
+                // 패널에서 새로 넘어온 경우 세션 메모리에 1회성 플래그 저장
+                sessionStorage.setItem('gys_quick_auto', 'true');
+            }
+
+            if (isQuickAutoTab) {
+                function handlePaymentAutoClick() {
+                    setTimeout(() => {
+                        const refundCheckbox = document.querySelector('input[name="agree_refund"]');
+                        if (refundCheckbox && !refundCheckbox.checked) {
+                            refundCheckbox.checked = true;
+                            refundCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+                            console.log('[Quick Auto] 약관 동의 체크 완료');
+                        }
+
+                        const applyPayBtn = document.getElementById('apply_payment');
+                        if (applyPayBtn) {
+                            console.log('[Quick Auto] 결제하기 버튼 자동 클릭');
+                            applyPayBtn.click();
+                        }
+                    }, 400);
+                }
+
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', handlePaymentAutoClick);
+                } else {
+                    handlePaymentAutoClick();
+                }
+            }
+            return;
         }
 
-        return; // 결제 페이지에서는 아래 예약 메인 로직 실행 안 함
+        // 기타 action 상태가 존재하는 동안은 패널 생성하지 않고 종료
+        return;
     }
 
     // =============================================================
@@ -87,29 +121,23 @@
                 }
             });
         }
-    } 
+    }
     // =============================================================
     // [PART C] 예약 메인 페이지 (/fmcs/102) 처리
     // =============================================================
     else if (currentPath === '/fmcs/102') {
         const isAutoLoginRequested = urlParams.get('autologin') === 'true';
 
-        // 💡 미로그인 상태 시 로그인 페이지로 리다이렉트하는 함수
         function handleAutoLoginRedirect() {
             const loggedIn = (typeof ISLOGIN !== 'undefined') ? ISLOGIN : false;
 
             if (!loggedIn) {
-                console.log('[Quick Auto] 미로그인 상태 확인됨. 로그인 페이지로 즉시 이동합니다.');
+                console.log('[Quick Auto] 미로그인 상태 확인됨. 로그인 페이지로 이동합니다.');
                 const currentFullUrl = encodeURIComponent(window.location.href);
                 window.location.href = `https://yeyak.gys.or.kr/fmcs/27?referer=${currentFullUrl}`;
                 return true;
             }
             return false;
-        }
-
-        // autologin=true 파라미터가 들어온 경우 즉시 1차 리다이렉트 체크
-        if (isAutoLoginRequested) {
-            if (handleAutoLoginRedirect()) return;
         }
 
         // 예비용 기본 상품 목록
@@ -122,7 +150,37 @@
             {"item_nm":"온라인 관외할증(군인/청소년)","sale_amt":3300,"item_cd":"I000226"}
         ];
 
-        // [1] 데이터 통신 및 예약 신청 함수 (isAutoLink 여부에 따라 탭 분기)
+        // 완전 순수 타겟 target="_blank"를 통한 무조건 독립 새 탭 분리
+        function openPaymentInNewTab(url) {
+            const form = document.createElement('form');
+            form.method = 'GET';
+            form.action = url.split('?')[0];
+            form.target = '_blank';
+
+            const queryString = url.split('?')[1];
+            if (queryString) {
+                const params = new URLSearchParams(queryString);
+                params.forEach((value, key) => {
+                    const input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = key;
+                    input.value = value;
+                    form.appendChild(input);
+                });
+            }
+
+            // 식별용 파라미터 추가
+            const panelParamInput = document.createElement('input');
+            panelParamInput.type = 'hidden';
+            panelParamInput.name = 'from_panel';
+            panelParamInput.value = 'true';
+            form.appendChild(panelParamInput);
+
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
+        }
+
         function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
             return new Promise((resolve) => {
                 var company_cd = "GYS10";
@@ -135,12 +193,6 @@
                 }
 
                 var member_number = typeof MEM_NO !== 'undefined' ? MEM_NO : '';
-
-                // 패널 터치 시에만 미리 새 탭 개설 (autologin 호출 시에는 현재 창 이동)
-                var payTab = null;
-                if (!isAutoLink) {
-                    payTab = window.open('about:blank', '_blank');
-                }
 
                 $.ajax({
                     url: "/rest/dailyuse/set_ticket_resve",
@@ -158,7 +210,6 @@
                     cache: false,
                     dataType: 'json',
                     error: function(xhr, status, error) {
-                        if (payTab) payTab.close();
                         alert('예약 요청 중 오류가 발생했습니다: ' + error);
                         resolve(false);
                     },
@@ -166,34 +217,25 @@
                         var result_cd = data.result_code;
 
                         if (result_cd != 0) {
-                            if (payTab) payTab.close();
                             alert(data.result_message || '예약에 실패했습니다.');
                             resolve(false);
                             return;
                         }
 
-                        // 깔끔한 결제 URL 조립
                         var targetUrl = `/fmcs/102?action=write&comcd=${company_cd}&resve_no=${data.r_num}`;
 
-                        // autologin 딥링크 접속 시 파이어폭스 팝업 경고 회피를 위해 현재 창 이동
                         if (isAutoLink) {
                             window.location.href = targetUrl;
                         } else {
-                            if (payTab) {
-                                payTab.location.href = targetUrl;
-                                payTab.focus();
-                            } else {
-                                window.location.href = targetUrl;
-                            }
+                            openPaymentInNewTab(targetUrl);
                         }
-                        
+
                         resolve(true);
                     }
                 });
             });
         }
 
-        // [2] API 호출 유틸리티
         async function fetchMonthStateList(yearMonth) {
             const url = `/rest/dailyuse/mon_state_list?company_code=GYS10&part_code=03&resve_mon=${yearMonth}&_=${Date.now()}`;
             try {
@@ -234,7 +276,6 @@
             return null;
         }
 
-        // [3] 날짜 유틸리티
         function getNextMonthYM() {
             const today = new Date();
             const nextMonthDate = new Date(today.getFullYear(), today.getMonth() + 1, 1);
@@ -253,7 +294,6 @@
             return `${yyyy}${mm}`;
         }
 
-        // [4] 반응형 스타일 적용
         function applyResponsiveStyles() {
             if (document.getElementById('gys-responsive-style')) return;
             const style = document.createElement('style');
@@ -292,7 +332,6 @@
             document.head.appendChild(style);
         }
 
-        // [5] 대시보드 UI 생성 함수
         function createCustomPanel() {
             if (document.getElementById('gys-custom-panel')) return;
 
@@ -301,7 +340,7 @@
 
             const panel = document.createElement('div');
             panel.id = 'gys-custom-panel';
-            
+
             Object.assign(panel.style, {
                 backgroundColor: '#ffffff',
                 border: '2px solid #1969c5',
@@ -324,15 +363,15 @@
                 <div style="font-weight: bold; font-size: 16px; margin-bottom: 12px; color: #1969c5; border-bottom: 2px solid #1969c5; padding-bottom: 6px;">
                     ⛳ 성저파크골프장 Quick 예약
                 </div>
-                
+
                 <div style="display: flex; gap: 6px; margin-bottom: 12px; align-items: center;">
                     <button id="gys-prev-month-btn" title="이전 달"
                             style="padding: 7px 12px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">◀</button>
-                    <input type="text" id="gys-ym-input" placeholder="YYYYMM" value="${defaultYM}" 
+                    <input type="text" id="gys-ym-input" placeholder="YYYYMM" value="${defaultYM}"
                            style="width: 100px; padding: 6px 2px; border: 1px solid #cccccc; border-radius: 4px; text-align: center; font-weight: bold; font-size: 15px;">
                     <button id="gys-next-month-btn" title="다음 달"
                             style="padding: 7px 12px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">▶</button>
-                    <button id="gys-fetch-btn" 
+                    <button id="gys-fetch-btn"
                             style="flex: 1; padding: 7px 10px; background-color: #1969c5; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px;">🔍 조회</button>
                 </div>
 
@@ -498,7 +537,6 @@
                         dateBtn.disabled = true;
                         dateBtn.style.backgroundColor = '#e9ecef';
 
-                        // 패널 버튼 터치 시 isAutoLink = false (새 탭으로 결제창 열기)
                         const isSuccess = await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false);
                         if (isSuccess) {
                             let count = parseInt(dateBtn.dataset.count, 10) + 1;
@@ -545,39 +583,6 @@
             loadDateList();
         }
 
-        // 💡 [신규 추가] autologin 시 상단 고정 "Quick 예약 패널 열기" 버튼 생성 함수
-        function createOpenPanelTriggerBtn() {
-            if (document.getElementById('gys-open-panel-trigger')) return;
-
-            const triggerBtn = document.createElement('button');
-            triggerBtn.id = 'gys-open-panel-trigger';
-            triggerBtn.innerHTML = '⛳ Quick 예약 패널 열기';
-            
-            Object.assign(triggerBtn.style, {
-                position: 'fixed',
-                top: '10px',
-                right: '10px',
-                zIndex: '999999',
-                backgroundColor: '#1969c5',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: '20px',
-                padding: '8px 14px',
-                fontWeight: 'bold',
-                fontSize: '12px',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-                cursor: 'pointer'
-            });
-
-            triggerBtn.addEventListener('click', () => {
-                createCustomPanel();
-                triggerBtn.style.display = 'none'; // 클릭 시 패널이 열리고 수동 버튼은 숨김
-            });
-
-            document.body.appendChild(triggerBtn);
-        }
-
-        // 페이지 로드 이벤트 처리
         window.addEventListener('load', async function() {
             const resveDate = urlParams.get('resve_date');
             const timeSeq   = urlParams.get('time_seq');
@@ -586,19 +591,18 @@
             if (isAutoLoginRequested) {
                 if (handleAutoLoginRedirect()) return;
 
-                // 💡 autologin 시에는 패널 자동 생성을 건너뛰는 대신 수동 생성 버튼 표시
-                createOpenPanelTriggerBtn();
-
                 if (resveDate && timeSeq) {
                     console.log(`[Quick Auto] 최속 예약 신청 시작: ${resveDate}, seq:${timeSeq}`);
-                    // autologin 딥링크 접속 시 isAutoLink = true (현재 창 직접 이동)
                     await custom_set_ticket_resve(resveDate, timeSeq, programCd, true);
                 }
             } else {
-                // autologin이 아닐 때만 메인 패널 자동 생성
-                const isActionWrite = urlParams.get('action') === 'write';
-                if (!isActionWrite) {
+                // Query Parameter가 전혀 없는 순수한 /fmcs/102 메인 페이지일 때만 패널 생성
+                const isPureMainPage = Array.from(urlParams.keys()).length === 0;
+
+                if (isPureMainPage) {
                     createCustomPanel();
+                } else {
+                    console.log('[Quick Auto] 파라미터가 존재하는 상태 페이지이므로 패널 생성을 건너뜁니다.');
                 }
             }
         });

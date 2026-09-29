@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.5.10
-// @description  스크린샷 캡처 시 휴무일/대회 텍스트 하단 잘림 현상 원천 차단 (패딩 및 transform 최종 보정)
+// @version      0.5.13
+// @description  최초 달력 로딩 시 다음 달 기본 조회 및 텍스트 파싱 안정화 버전
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -79,24 +79,30 @@
         safeSession.remove('gys_click_reservations');
     }
 
-    // 4줄 분리 파싱
+    // 텍스트 파싱: 부제(동절기 1부, 1부 등)와 시간대 추출 정돈
     function parseTimeTo4Lines(rawText) {
         if (!rawText) return { part: '', startTime: '', endTime: '' };
 
-        let cleanText = rawText.replace(/<br>/g, ' ');
-        const parts = cleanText.split('|');
-        let partName = parts[0] ? parts[0].trim() : '';
-        let timeRange = parts[1] ? parts[1].trim() : '';
+        let cleanText = rawText.replace(/<br>/g, ' ').trim();
+        let partName = '';
+        let timeRange = '';
 
-        if (!timeRange && cleanText.includes('~')) {
+        if (cleanText.includes('|')) {
+            const parts = cleanText.split('|');
+            partName = parts[0] ? parts[0].trim() : '';
+            timeRange = parts[1] ? parts[1].trim() : '';
+        } else {
             const timeMatch = cleanText.match(/(\d{2}:\d{2}~\d{2}:\d{2})/);
             if (timeMatch) {
                 timeRange = timeMatch[1];
                 partName = cleanText.replace(timeMatch[1], '').trim();
+            } else {
+                timeRange = cleanText;
             }
         }
 
-        if (partName && !partName.startsWith('(')) {
+        if (partName) {
+            partName = partName.replace(/^\(/, '').replace(/\)$/, '').trim();
             partName = `(${partName})`;
         }
 
@@ -175,6 +181,14 @@
         return '' + yyyy + mm;
     }
 
+    function addMonthsToYM(ymStr, offset) {
+        if (!ymStr || ymStr.length !== 6) return ymStr;
+        const year = parseInt(ymStr.substring(0, 4), 10);
+        const month = parseInt(ymStr.substring(4, 6), 10) - 1;
+        const targetDate = new Date(year, month + offset, 1);
+        return '' + targetDate.getFullYear() + String(targetDate.getMonth() + 1).padStart(2, '0');
+    }
+
     function formatYMWithDot(ymStr) {
         if (!ymStr || ymStr.length !== 6) return ymStr;
         return ymStr.substring(0, 4) + '.' + ymStr.substring(4, 6);
@@ -187,10 +201,7 @@
 
     function getValidTargetDate(dateStr) {
         const pureDate = (dateStr || '').replace(/-/g, '');
-        const todayPure = getTodayYMD();
-        if (!pureDate || pureDate < todayPure) {
-            return todayPure;
-        }
+        if (!pureDate) return getTodayYMD();
         return pureDate;
     }
 
@@ -251,7 +262,6 @@
                         btn.style.transform = 'translateY(-1px)';
                     });
 
-                    // 캔버스 복사본 렌더링 시 휴무일 텍스트 하단 짤림 현상 방지를 위해 위로 미세 이동
                     const holidaySpans = clonedDoc.querySelectorAll('.gys-holiday-text');
                     holidaySpans.forEach(span => {
                         span.style.transform = 'translateY(-1px)';
@@ -613,17 +623,6 @@
             } catch (err) { return null; }
         }
 
-        function addMonthsToYM(ymStr, offset) {
-            if (!ymStr || ymStr.length !== 6) return ymStr;
-            const year = parseInt(ymStr.substring(0, 4), 10);
-            const month = parseInt(ymStr.substring(4, 6), 10) - 1;
-            const targetDate = new Date(year, month + offset, 1);
-
-            const currentYM = getCurrentYM();
-            const targetYM = '' + targetDate.getFullYear() + String(targetDate.getMonth() + 1).padStart(2, '0');
-            return targetYM < currentYM ? currentYM : targetYM;
-        }
-
         function scrollToPanelTop() {
             const panel = document.getElementById('gys-custom-panel');
             if (!panel) return;
@@ -698,7 +697,7 @@
             applyResponsiveStyles();
 
             const currentYM = getCurrentYM();
-            const defaultYM = addMonthsToYM(currentYM, 1);
+            const defaultYM = addMonthsToYM(currentYM, 1); // 최초 로딩 시 다음 달(+1달) 기본 지정
             const defaultYMDot = formatYMWithDot(defaultYM);
             const todayHyphen = getTodayYMDHyphen();
             const todayMMDD = formatMMDD(todayHyphen);
@@ -748,7 +747,7 @@
                         '<select id="gys-time-select" style="width: 100%; height: 34px; padding: 2px 2px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; color: #333333; background-color: #ffffff;"><option value="">시간대 로딩 중...</option></select>' +
                         '<select id="gys-program-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 11px; font-weight: bold; color: #333333; background-color: #ffffff;"><option value="">상품 로딩 중...</option></select>' +
                         '<div style="display: flex; align-items: center; position: relative; flex-shrink: 0;">' +
-                            '<input type="date" id="gys-base-date-input" value="' + todayHyphen + '" min="' + todayHyphen + '" style="position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none;">' +
+                            '<input type="date" id="gys-base-date-input" value="' + todayHyphen + '" style="position: absolute; opacity: 0; width: 1px; height: 1px; pointer-events: none;">' +
                             '<button id="gys-base-date-btn" title="기준일 선택 (시간표/상품)" style="height: 34px; padding: 0 8px; background-color: #ffffff; border: 1px solid #cccccc; border-radius: 4px; cursor: pointer; font-size: 12px; font-weight: bold; color: #333333; line-height: 1.0;"><span id="gys-base-date-label">' + todayMMDD + '</span></button>' +
                         '</div>' +
                     '</div>' +
@@ -964,12 +963,10 @@
             async function loadDateList() {
                 const ymBtn = document.getElementById('gys-ym-reload-btn');
                 let ymValue = parseYMFromDot(ymBtn.textContent.trim());
-                const currentYM = getCurrentYM();
 
-                if (!ymValue || ymValue.length !== 6 || ymValue < currentYM) {
-                    alert('과거 달은 선택하거나 조회할 수 없습니다. 이번 달로 변경합니다.');
-                    ymValue = currentYM;
-                    ymBtn.textContent = formatYMWithDot(currentYM);
+                if (!ymValue || ymValue.length !== 6) {
+                    ymValue = defaultYM;
+                    ymBtn.textContent = formatYMWithDot(ymValue);
                 }
 
                 const btnContainer = document.getElementById('gys-date-buttons-container');
@@ -1011,12 +1008,6 @@
                     firstWorkDateHyphen = currentMonthItems[0].date;
                 }
 
-                const todayHyphen = getTodayYMDHyphen();
-
-                if (firstWorkDateHyphen && firstWorkDateHyphen < todayHyphen) {
-                    firstWorkDateHyphen = todayHyphen;
-                }
-
                 if (firstWorkDateHyphen) {
                     await updateAllOptions(firstWorkDateHyphen, false);
                 }
@@ -1038,8 +1029,6 @@
                     btnContainer.appendChild(prevBtn);
                 }
 
-                const todayPure = getTodayYMD();
-
                 currentMonthItems.forEach(function(item) {
                     const rawDate = item.date;
                     const dayNum = parseInt(rawDate.split('-')[2], 10);
@@ -1050,20 +1039,18 @@
                     if (dayOfWeek === 0) textColor = '#d9534f';
                     if (dayOfWeek === 6) textColor = '#0275d8';
 
-                    const isPastDay = formattedResveDate < todayPure;
                     const hasCloseAdvice = item.close_advice && item.close_advice.trim() !== '';
                     const rawStateText = hasCloseAdvice ? item.close_advice.trim() : (item.state_nm || '');
                     const isHolidayReason = item.state_cd === "30" || hasCloseAdvice || rawStateText.indexOf('휴관') !== -1 || rawStateText.indexOf('대회') !== -1;
 
-                    if (isPastDay || isHolidayReason) {
+                    if (isHolidayReason) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
 
                         const holidayLabel = isHolidayReason ? rawStateText : '';
 
-                        // 텍스트 아래에 여유 공간(padding-bottom: 7px)을 주어 캡처 시 잘림 방지
                         closedBtn.innerHTML = '' +
-                            '<div style="font-size: 14.5px; font-weight: bold; color: ' + (isPastDay ? '#ced4da' : textColor) + '; text-align: center; line-height: 1.0; pointer-events: none;">' + dayNum + '</div>' +
+                            '<div style="font-size: 14.5px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1.0; pointer-events: none;">' + dayNum + '</div>' +
                             '<div style="flex: 1; display: flex; align-items: flex-end; justify-content: center; width: 100%; pointer-events: none; padding-bottom: 7px;">' +
                                 (holidayLabel ? 
                                     '<span class="gys-holiday-text" style="' +
@@ -1203,11 +1190,6 @@
             });
 
             baseDateInput.addEventListener('change', function() {
-                const todayHyphen = getTodayYMDHyphen();
-                if (this.value < todayHyphen) {
-                    alert('오늘 이전 날짜는 선택할 수 없습니다.');
-                    this.value = todayHyphen;
-                }
                 updateAllOptions(this.value, false);
                 scrollToPanelTop();
             });

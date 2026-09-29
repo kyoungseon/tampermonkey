@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.1.1
+// @version      0.1.2
 // @description  Quick 예약, paymentResult의 alert을 confirm으로 훅하여 location.href 실행 전 탭 즉시 종료
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -162,16 +162,28 @@
         // 1. 중간 결제 결과 처리 상태 (paymentResult)
         if (actionParam === 'paymentResult') {
             if (isQuickAutoTab) {
-                safeSession.remove('gys_quick_auto');
+                // 부모 창(opener) 참조 끊기
+                try {
+                    if (win.opener) {
+                        win.opener = null;
+                    }
+                } catch (e) {}
 
+                // 원본 alert을 가로채서 confirm 팝업 표시
                 win.alert = function(msg) {
-                    console.log('[Quick] paymentResult alert 훅 실행:', msg);
+                    console.log('[Quick Auto] paymentResult alert 가로챔 & reg_read 차단 완료');
+
+                    // confirm 클릭 시점에 세션 제거
+                    safeSession.remove('gys_quick_auto');
+
                     const isConfirmed = confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?");
                     if (isConfirmed) {
-                        win.close();
                         console.log('[Quick Auto] 사용자가 탭 닫기를 선택했습니다.');
+                        win.close();
                     } else {
                         console.log('[Quick Auto] 사용자가 탭 유지를 선택했습니다.');
+                        // 탭 유지 선택 시 원본 스크립트의 location.href 이동 강제 중단
+                        win.stop && win.stop();
                     }
                 };
             }
@@ -179,7 +191,7 @@
         }
 
         // 2. 최종 영수증/예약 완료 확인 상태 (reg_read)
-        else if (actionParam === 'reg_read') {
+        if (actionParam === 'reg_read') {
             if (isQuickAutoTab) {
                 safeSession.remove('gys_quick_auto');
 
@@ -187,10 +199,10 @@
                     setTimeout(function() {
                         const isConfirmed = confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?");
                         if (isConfirmed) {
-                            console.log('[Quick] 사용자가 탭 닫기를 선택했습니다.');
+                            console.log('[Quick Auto] 사용자가 탭 닫기를 선택했습니다.');
                             win.close();
                         } else {
-                            console.log('[Quick] 사용자가 영수증 확인을 선택하여 화면을 유지합니다.');
+                            console.log('[Quick Auto] 사용자가 영수증 확인을 선택하여 화면을 유지합니다.');
                         }
                     }, 350);
                 }
@@ -205,7 +217,7 @@
         }
 
         // 3. 결제 진행 신청 상태 (write)
-        else if (actionParam === 'write') {
+        if (actionParam === 'write') {
             if (isFromPanelParam) {
                 safeSession.set('gys_quick_auto', 'true');
             }

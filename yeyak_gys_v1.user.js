@@ -1,5 +1,5 @@
 // ==UserScript==
-// @name         고양도시관리공사 자동로그인 및 Quick 예약 툴바
+// @name         고양도시관리공사 성저파크골프장 Quick 예약도우미
 // @namespace    http://tampermonkey.net/
 // @version      0.9.38
 // @description  Quick 예약, paymentResult의 alert을 confirm으로 훅하여 location.href 실행 전 탭 즉시 종료

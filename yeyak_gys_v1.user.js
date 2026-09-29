@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      1.0.0
 // @description  Quick 예약, paymentResult의 alert을 confirm으로 훅하여 location.href 실행 전 탭 즉시 종료
-// @author       You
+// @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
 // @match        https://yeyak.gys.or.kr/fmcs/27*

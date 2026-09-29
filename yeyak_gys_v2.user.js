@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.1.2
-// @description  Quick 예약, paymentResult의 alert을 confirm으로 훅하여 location.href 실행 전 탭 즉시 종료
+// @version      0.1.3
+// @description  예약현황 및 로그인 처리 기능
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -1015,8 +1015,6 @@
 
                     dateBtn.addEventListener('click', async function(e) {
                         e.stopPropagation();
-
-                        await updateAllOptions(rawDate, false);
 
                         const selectedTimeSeq = document.getElementById('gys-time-select').value;
                         const selectedProgramCode = document.getElementById('gys-program-select').value;

@@ -7,8 +7,6 @@
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
 // @match        https://yeyak.gys.or.kr/fmcs/27*
-// @updateURL    https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys_v2.user.js
-// @downloadURL  https://raw.githubusercontent.com/kyoungseon/tampermonkey/main/yeyak_gys_v2.user.js
 // @grant        window.close
 // @grant        unsafeWindow
 // @grant        GM_xmlhttpRequest

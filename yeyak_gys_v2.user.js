@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.5.52
+// @version      0.5.60
 // @description  이전 만족하셨던 달력 날짜 버튼 및 텍스트 뿌리기 스타일 완벽 복원
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -188,6 +188,7 @@
     if (actionParam) {
         const isQuickAutoTab = isFromPanelParam || safeSession.get('gys_quick_auto') === 'true';
         if (actionParam === 'paymentResult' && isQuickAutoTab) {
+			safeSession.set('gys_cached_change_res', 'true');
             try { if (win.opener) win.opener = null; } catch (e) {}
             win.alert = (msg) => {
                 safeSession.remove('gys_quick_auto');
@@ -196,11 +197,23 @@
             };
             return;
         }
-        if (actionParam === 'reg_read' && isQuickAutoTab) {
-            safeSession.remove('gys_quick_auto');
-            const handleRegReadConfirm = () => setTimeout(() => { if (confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?")) win.close(); }, 350);
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
-            else handleRegReadConfirm();
+        if (actionParam === 'reg_read') {
+            safeSession.set('gys_cached_change_res', 'true');
+            if (isQuickAutoTab) {
+                safeSession.remove('gys_quick_auto');
+
+                const isRefundPath = currentPath.includes('/fmcs/122');
+                const alertMsg = isRefundPath
+                    ? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
+                    : "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
+
+                const handleRegReadConfirm = () => setTimeout(() => {
+                    if (confirm(alertMsg)) win.close();
+                }, 350);
+
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
+                else handleRegReadConfirm();
+            }
             return;
         }
         if (actionParam === 'write') {
@@ -219,6 +232,10 @@
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handlePaymentAutoClick);
                 else handlePaymentAutoClick();
             }
+            return;
+        }
+        if (actionParam === 'refund') {
+            if (isFromPanelParam) safeSession.set('gys_quick_auto', 'true');
             return;
         }
         return;
@@ -251,7 +268,7 @@
             const userNameBtn = document.getElementById('gys-user-name-btn');
             if (!userNameBtn) return;
             if (cachedMemberInfo.name && win.ISLOGIN) {
-                userNameBtn.innerHTML = `👤 <span style="color: #1969c5; line-height: 1.0;">${cachedMemberInfo.name}</span>`;
+                userNameBtn.innerHTML = `👤 <span style="color: #274081; line-height: 1.0;">${cachedMemberInfo.name}</span>`;
                 userNameBtn.title = "클릭 시 로그아웃 후 자동로그인";
             } else {
                 userNameBtn.innerHTML = `🔑 로그인`;
@@ -357,15 +374,15 @@
                 });
                 modalOverlay.innerHTML = `
                     <div style="background-color: #ffffff; width: 44em; max-width: 100%; border-radius: 4px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); overflow: hidden; font-family: 'Malgun Gothic', sans-serif;">
-                        <div style="background-color: #1969c5; color: #ffffff; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
+                        <div style="background-color: #274081; color: #ffffff; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
                             <p style="margin: 0; font-size: 16px; font-weight: 600; line-height: 1.2;">회원카드</p>
                             <button id="gys-card-close-btn" style="background: none; border: none; color: #ffffff; font-size: 20px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                         </div>
                         <div style="padding: 30px 20px; text-align: center; background-color: #ffffff;">
                             <dl style="margin: 0; padding: 0;">
-                                <dt id="gys-card-name" style="font-size: 24px; font-weight: bold; color: #1969c5; margin-bottom: 8px;"></dt>
+                                <dt id="gys-card-name" style="font-size: 24px; font-weight: bold; color: #274081; margin-bottom: 8px;"></dt>
                                 <dd id="gys-card-facility" class="tt" style="margin: 0 0 20px 0; font-size: 16px; font-weight: bold; color: #333333;"></dd>
-                                <div style="background-color: #f1f3f5; padding: 12px; border-radius: 4px; font-size: 14px; color: #333333; margin-bottom: 25px; display: inline-block;">아래의 바코드를 스캐너에 인식시켜 주세요!</div>
+                                <div style="background-color: #F0F0F0; padding: 12px; border-radius: 4px; font-size: 14px; color: #333333; margin-bottom: 25px; display: inline-block;">아래의 바코드를 스캐너에 인식시켜 주세요!</div>
                                 <dd class="img" style="margin: 0; display: flex; justify-content: center;"><svg id="gys-dynamic-barcode-svg"></svg></dd>
                             </dl>
                         </div>
@@ -395,6 +412,19 @@
         ];
 
         function openPaymentInNewTab(url) {
+            const form = document.createElement('form');
+            form.method = 'GET'; form.action = url.split('?')[0]; form.target = '_blank';
+            url.split('?')[1]?.split('&').forEach(param => {
+                const [k, v] = param.split('=');
+                const input = document.createElement('input'); input.type = 'hidden'; input.name = k; input.value = decodeURIComponent(v);
+                form.appendChild(input);
+            });
+            const panelParamInput = document.createElement('input'); panelParamInput.type = 'hidden'; panelParamInput.name = 'from_panel'; panelParamInput.value = 'true';
+            form.appendChild(panelParamInput);
+            document.body.appendChild(form); form.submit(); document.body.removeChild(form);
+        }
+
+        function openRefundInNewTab(url) {
             const form = document.createElement('form');
             form.method = 'GET'; form.action = url.split('?')[0]; form.target = '_blank';
             url.split('?')[1]?.split('&').forEach(param => {
@@ -533,7 +563,7 @@
             const todayMMDD = formatMMDD(todayHyphen);
 
             const userNameBtnLabel = (cachedMemberInfo.name && win.ISLOGIN)
-                ? `👤 <span style="color: #1969c5; line-height: 1.0;">${cachedMemberInfo.name}</span>`
+                ? `👤 <span style="color: #274081; line-height: 1.0;">${cachedMemberInfo.name}</span>`
                 : `🔑 로그인`;
 
             const panel = document.createElement('div');
@@ -541,8 +571,8 @@
             Object.assign(panel.style, { backgroundColor: '#ffffff', border: '1px solid #e0e0e0', padding: '8px 2px', fontFamily: 'Malgun Gothic, sans-serif', boxSizing: 'border-box', position: 'relative' });
 
             panel.innerHTML = `
-                <div style="display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid #1969c5; padding-bottom: 6px; margin-bottom: 8px; padding-left: 2px; padding-right: 2px;">
-                    <span style="font-weight: bold; font-size: 17.5px; color: #1969c5; line-height: 1.1;">⛳ 성저파크골프장 Quick 예약</span>
+                <div style="display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid #274081; padding-bottom: 6px; margin-bottom: 8px; padding-left: 2px; padding-right: 2px;">
+                    <span style="font-weight: bold; font-size: 17.5px; color: #274081; line-height: 1.1;">⛳ 성저파크골프장 Quick 예약</span>
                     <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px; width: 75px;">
                         <div style="width: 100%; height: 4px; background-color: #e2e8f0; border-radius: 2px; overflow: hidden;"><div id="gys-ms-gauge-bar" style="width: 0%; height: 100%; background-color: #28a745;"></div></div>
                         <span id="gys-realtime-clock" style="font-size: 14.5px; color: #0056b3; font-family: monospace; font-weight: bold; line-height: 1;">00:00:00</span>
@@ -551,11 +581,11 @@
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 3px; margin-bottom: 10px; padding: 0 1px;">
                     <div style="display: flex; gap: 2px; align-items: center; flex-shrink: 0;">
                         <button id="gys-prev-month-btn" style="width: 32px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&lt;</button>
-                        <button id="gys-ym-reload-btn" style="width: 70px; height: 35px; border: 1.5px solid #1969c5; border-radius: 4px; font-weight: bold; font-size: 13px; background-color: #e8f4ff; color: #1969c5; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; line-height: 1.0;">${defaultYMDot}</button>
+                        <button id="gys-ym-reload-btn" style="width: 70px; height: 35px; border: 1.5px solid #274081; border-radius: 4px; font-weight: bold; font-size: 13px; background-color: #e8f4ff; color: #274081; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; line-height: 1.0;">${defaultYMDot}</button>
                         <button id="gys-next-month-btn" style="width: 32px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&gt;</button>
                     </div>
                     <div style="display: flex; gap: 3px; align-items: center; flex-shrink: 0; position: relative;">
-                        <button id="gys-user-name-btn" style="height: 35px; padding: 0 6px; background-color: #f8f9fa; border: 1.5px solid #1969c5; border-radius: 4px; cursor: pointer; font-size: 11.5px; font-weight: bold; color: #333333; display: flex; align-items: center; justify-content: center; line-height: 1.0;">${userNameBtnLabel}</button>
+                        <button id="gys-user-name-btn" style="height: 35px; padding: 0 6px; background-color: #f8f9fa; border: 1.5px solid #274081; border-radius: 4px; cursor: pointer; font-size: 11.5px; font-weight: bold; color: #333333; display: flex; align-items: center; justify-content: center; line-height: 1.0;">${userNameBtnLabel}</button>
                         <button id="gys-card-btn" style="height: 35px; padding: 0 6px; background-color: #f8f9fa; border: 1.5px solid #17a2b8; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; color: #17a2b8; display: flex; align-items: center; justify-content: center; line-height: 1.0;">📊 회원카드</button>
                         <button id="gys-menu-btn" title="추가 기능 메뉴" style="width: 35px; height: 35px; background-color: #f8f9fa; border: 1.5px solid #6c757d; border-radius: 4px; cursor: pointer; font-size: 15px; font-weight: bold; display: flex; align-items: center; justify-content: center; padding: 0; color: #333333;">☰</button>
                     </div>
@@ -572,13 +602,12 @@
                 </div>
                 <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 8px 0;">
                 <div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box;">
-                    <div style="display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 1px; text-align: center; font-weight: bold; font-size: 12.5px; margin-bottom: 4px; background-color: #f1f3f5; padding: 4px 0; border-radius: 0px;">
+                    <div style="display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 1px; text-align: center; font-weight: bold; font-size: 12.5px; margin-bottom: 4px; background-color: #F0F0F0; padding: 4px 0; border-radius: 0px;">
                         <span style="color: #d9534f;">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span style="color: #0275d8;">토</span>
                     </div>
                     <div id="gys-date-buttons-container" style="display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 1px; width: 100%; box-sizing: border-box;"></div>
                 </div>`;
 
-            // 📱 레이어 팝업
             const popupOverlay = document.createElement('div');
             popupOverlay.id = 'gys-smartphone-modal-overlay';
             Object.assign(popupOverlay.style, {
@@ -624,7 +653,6 @@
 
             initRealtimeClock();
 
-            // 햄버거 버튼 토글
             const menuBtn = document.getElementById('gys-menu-btn');
             menuBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
@@ -638,13 +666,11 @@
                 if (e.target === popupOverlay) popupOverlay.style.display = 'none';
             });
 
-            // 팝업 내부: 스크린샷 버튼
             document.getElementById('gys-modal-capture-btn').addEventListener('click', () => {
                 popupOverlay.style.display = 'none';
                 capturePanelToPng();
             });
 
-            // 팝업 내부: 예약현황 새로고침 버튼
             document.getElementById('gys-modal-refresh-res-btn').addEventListener('click', async () => {
                 popupOverlay.style.display = 'none';
                 const isLoggedIn = await checkTabSessionStatus();
@@ -734,9 +760,9 @@
                                 const isServer = resObj.type === 'server';
                                 infoBadge.innerHTML = `
                                     <div style="background-color: ${isServer ? '#2e7d32' : '#1565c0'}; border: 1px solid ${isServer ? '#1b5e20' : '#0d47a1'}; color: #ffffff; border-radius: 4px; padding: 4px 0; margin-top: 1px; width: 98%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
-                                        ${parsedObj.part ? `<span style="font-size: 11.5px; font-weight: 900; margin-bottom: 4px;">${parsedObj.part}</span>` : ''}
-                                        <span style="font-size: 11px; font-weight: 800;">${parsedObj.startTime}</span>
-                                        ${parsedObj.endTime ? `<span style="font-size: 8px; font-weight: bold; opacity: 0.8; margin: -2px 0;">~</span><span style="font-size: 11px; font-weight: 800;">${parsedObj.endTime}</span>` : ''}
+                                        ${parsedObj.part ? `<span style="font-size: 11.5px; font-weight: 700; margin-bottom: 4px;">${parsedObj.part}</span>` : ''}
+                                        <span style="font-size: 11px; font-weight: 400;">${parsedObj.startTime}</span>
+                                        ${parsedObj.endTime ? `<span style="font-size: 8px; font-weight: bold; opacity: 0.8; margin: -2px 0;">~</span><span style="font-size: 11px; font-weight: 400;">${parsedObj.endTime}</span>` : ''}
                                     </div>`;
                             }
                         }
@@ -747,11 +773,11 @@
             async function loadDateList() {
                 const ymBtn = document.getElementById('gys-ym-reload-btn');
                 let ymValue = parseYMFromDot(ymBtn.textContent.trim());
-				
+
                 if (!ymValue || ymValue.length !== 6) { ymValue = defaultYM; ymBtn.textContent = formatYMWithDot(ymValue); }
 
                 const btnContainer = document.getElementById('gys-date-buttons-container');
-                btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #1969c5; text-align: center; padding: 15px 0;">날짜 데이터 로딩 중...</div>';
+                btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #274081; text-align: center; padding: 15px 0;">날짜 데이터 로딩 중...</div>';
 
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
@@ -807,18 +833,18 @@
                     if (isHolidayReason) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
-						
-                        const holidayLabel = isHolidayReason ? rawStateText : '';						
-						
+
+                        const holidayLabel = isHolidayReason ? rawStateText : '';
+
                         closedBtn.innerHTML = '' +
                             '<div style="font-size: 14.5px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1.0; pointer-events: none;">' + dayNum + '</div>' +
                             '<div style="flex: 1; display: flex; align-items: flex-end; justify-content: center; width: 100%; pointer-events: none; padding-bottom: 7px;">' +
-                                (holidayLabel ? 
+                                (holidayLabel ?
                                     '<span class="gys-holiday-text" style="' +
                                         'width: 100%; font-size: 10px; color: #d9534f; font-weight: bold; line-height: 1.15; ' +
                                         'text-align: center; word-break: keep-all; overflow-wrap: anywhere; white-space: normal; ' +
                                         'overflow: hidden; pointer-events: none;' +
-                                    '">' + holidayLabel + '</span>' 
+                                    '">' + holidayLabel + '</span>'
                                     : '') +
                             '</div>';
 
@@ -827,15 +853,15 @@
                             boxSizing: 'border-box', cursor: 'not-allowed', width: '100%', padding: '3px 0 0 0', userSelect: 'none',
                             display: 'flex', flexDirection: 'column', alignItems: 'center'
                         });
-						
+
                         btnContainer.appendChild(closedBtn);
                         return;
                     }
 
-                    const dateBtn = document.createElement('button');
+					const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.resveDate = formattedResveDate;
-					
+
                     dateBtn.innerHTML = '' +
                         '<div class="gys-day-number" style="font-size: 14.5px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1.0; pointer-events: none; padding-top: 3px;">' + dayNum + '</div>' +
                         '<div class="gys-info-badge" style="flex: 1; display: flex; flex-direction: column; justify-content: center; align-items: center; width: 100%; pointer-events: none; overflow: hidden; padding-bottom: 1px;"></div>';
@@ -845,17 +871,76 @@
                         cursor: 'pointer', boxSizing: 'border-box', transition: 'all 0.15s', width: '100%', padding: '0',
                         display: 'flex', flexDirection: 'column', alignItems: 'stretch'
                     });
-					
+
                     dateBtn.onmouseover = () => { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#e8f4ff'; };
                     dateBtn.onmouseout = () => { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#ffffff'; };
 
+                    // 꾹 누르기(Long-press) 관련 변수 및 타이머 설정
+                    let pressTimer = null;
+                    let isLongPress = false;
+
+                    const startLongPressCheck = (e) => {
+                        if (formattedResveDate < getTodayYMD()) return;
+                        isLongPress = false;
+                        pressTimer = setTimeout(() => {
+                            isLongPress = true;
+                            const reservationsMap = getSessionReservationsMap();
+                            const resObj = reservationsMap[formattedResveDate];
+
+                            if (!resObj || resObj.type !== 'server' || !resObj.data) {
+                                alert('해당 날짜에 연동된 서버 예약 정보가 없습니다.');
+                                return;
+                            }
+
+                            const d = resObj.data;
+                            const slipNo = d.slip_no || '';
+                            const comcd = d.comcd || 'GYS10';
+                            const resveNo = d.entr_res_idx || '';
+                            const requestNo = d.req_no !== undefined ? d.req_no : 0;
+                            const timeIdx = d.res_time_idx || 1;
+                            const useDate = d.use_date || '';
+                            const timeName = d.time_name || '';
+
+                            if (!resveNo || !slipNo) {
+                                alert('환불에 필요한 상세 예약 번호가 누락되었습니다.');
+                                return;
+                            }
+
+                            if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
+                                const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
+                                openRefundInNewTab(refundUrl);
+                            }
+                        }, 700);
+                    };
+
+                    const cancelLongPressCheck = () => {
+                        if (pressTimer) {
+                            clearTimeout(pressTimer);
+                            pressTimer = null;
+                        }
+                    };
+
+                    // 마우스 및 터치 이벤트 바인딩
+                    dateBtn.addEventListener('mousedown', startLongPressCheck);
+                    dateBtn.addEventListener('mouseup', cancelLongPressCheck);
+                    dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
+
+                    dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: true });
+                    dateBtn.addEventListener('touchend', cancelLongPressCheck);
+                    dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
+
+                    // 일반 클릭 이벤트 (꾹 누르기가 발동된 경우 클릭 실행 차단)
                     dateBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
+                        if (isLongPress) {
+                            e.preventDefault();
+                            return;
+                        }
                         if (formattedResveDate < getTodayYMD()) return;
 
                         const timeSelectEl = document.getElementById('gys-time-select');
                         const programSelectEl = document.getElementById('gys-program-select');
-                        
+
                         let selectedTimeSeq = timeSelectEl.value;
                         let selectedProgramCode = programSelectEl.value;
 

@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.5.60
-// @description  이전 만족하셨던 달력 날짜 버튼 및 텍스트 뿌리기 스타일 완벽 복원
+// @version      0.5.87
+// @description  renderReservationStatusMap 스코프 위치 조정 및 에러 해결 완료
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -20,19 +20,32 @@
     let serverTimeOffsetMs = 0;
     let cachedMemberInfo = { name: '', barcode: '', facility: '고양체육관' };
 
-    const safeSession = {
-        get: (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } },
-        set: (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} },
-        remove: (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} }
+    // 로컬 스토리지 기본값 상수 맵 정의
+    const LOCAL_DEFAULT_VALUES = {
+        'gys_local_env_resve_day': '15',
+        'gys_local_env_resve_time_seq': '',
+        'gys_local_env_program_cd': 'I000221'
     };
 
-    const safeLocal = {
-        get: (key) => { try { return win.localStorage.getItem(key); } catch (e) { return null; } },
-        set: (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} }
+    // 스토리지 입출력 통합 함수
+    const loadSessionData = (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } };
+    const saveSessionData = (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} };
+    const removeSessionData = (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} };
+
+    const loadLocalData = (key) => {
+        try {
+            let val = win.localStorage.getItem(key);
+            if (!val) {
+                val = LOCAL_DEFAULT_VALUES[key] !== undefined ? LOCAL_DEFAULT_VALUES[key] : '';
+                win.localStorage.setItem(key, val);
+            }
+            return val;
+        } catch (e) { return LOCAL_DEFAULT_VALUES[key] || ''; }
     };
+    const saveLocalData = (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} };
 
     function getSessionReservationsMap() {
-        const jsonStr = safeSession.get('gys_reservations_map');
+        const jsonStr = loadSessionData('gys_session_reservations_map');
         if (!jsonStr) return {};
         try {
             const parsed = JSON.parse(jsonStr);
@@ -41,14 +54,14 @@
     }
 
     function setSessionReservationsMap(mapObj) {
-        safeSession.set('gys_reservations_map', JSON.stringify(mapObj));
+        saveSessionData('gys_session_reservations_map', JSON.stringify(mapObj));
     }
 
     function clearSessionReservationsMap() {
-        safeSession.remove('gys_reservations_map');
-        safeSession.remove('gys_cached_mem_no');
-        safeSession.remove('gys_cached_mem_nm');
-        safeSession.remove('gys_cached_barcode');
+        removeSessionData('gys_session_reservations_map');
+        removeSessionData('gys_session_mem_no');
+        removeSessionData('gys_session_mem_nm');
+        removeSessionData('gys_session_mem_barcode');
     }
 
     if (window.location.pathname === '/fmcs/27' || window.location.pathname.includes('/fmcs/31')) {
@@ -151,7 +164,7 @@
             const canvas = await h2c(panel, {
                 scale: 2, backgroundColor: '#ffffff', useCORS: true, logging: false,
                 onclone: (clonedDoc) => {
-                    clonedDoc.querySelectorAll('#gys-user-name-btn, #gys-card-btn, #gys-menu-btn').forEach(btn => {
+                    clonedDoc.querySelectorAll('#gys-user-name-btn, #gys-refresh-res-btn, #gys-capture-btn, #gys-menu-btn').forEach(btn => {
                         btn.style.display = 'inline-flex'; btn.style.alignItems = 'center'; btn.style.justifyContent = 'center'; btn.style.transform = 'translateY(-1px)';
                     });
                     clonedDoc.querySelectorAll('.gys-holiday-text').forEach(span => { span.style.transform = 'translateY(-1px)'; });
@@ -169,7 +182,7 @@
                     if (navigator.share && navigator.canShare) {
                         const file = new File([blob], fileName, { type: 'image/png' });
                         if (navigator.canShare({ files: [file] })) {
-                            await navigator.share({ files: [file], title: '성저파크골프장 예약 스크린샷', text: `[${cachedMemberInfo.name}] 성저파크골프장 Quick 예약 현황` });
+                            await navigator.share({ files: [file], title: '성저파크골프장 예약 캡쳐', text: `[${cachedMemberInfo.name}] 성저파크골프장 Quick 예약 현황` });
                             shareSuccess = true;
                         }
                     }
@@ -181,26 +194,26 @@
                 }
             }, 'image/png');
         } catch (err) {
-            alert('스크린샷 생성 중 오류가 발생했습니다.');
+            alert('캡쳐 생성 중 오류가 발생했습니다.');
         }
     }
 
     if (actionParam) {
-        const isQuickAutoTab = isFromPanelParam || safeSession.get('gys_quick_auto') === 'true';
+        const isQuickAutoTab = isFromPanelParam || loadSessionData('gys_session_quick_auto') === 'true';
         if (actionParam === 'paymentResult' && isQuickAutoTab) {
-			safeSession.set('gys_cached_change_res', 'true');
+            saveSessionData('gys_session_change_resve', 'true');
             try { if (win.opener) win.opener = null; } catch (e) {}
             win.alert = (msg) => {
-                safeSession.remove('gys_quick_auto');
+                removeSessionData('gys_session_quick_auto');
                 if (confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?")) win.close();
                 else win.stop && win.stop();
             };
             return;
         }
         if (actionParam === 'reg_read') {
-            safeSession.set('gys_cached_change_res', 'true');
+            saveSessionData('gys_session_change_resve', 'true');
             if (isQuickAutoTab) {
-                safeSession.remove('gys_quick_auto');
+                removeSessionData('gys_session_quick_auto');
 
                 const isRefundPath = currentPath.includes('/fmcs/122');
                 const alertMsg = isRefundPath
@@ -217,7 +230,7 @@
             return;
         }
         if (actionParam === 'write') {
-            if (isFromPanelParam) safeSession.set('gys_quick_auto', 'true');
+            if (isFromPanelParam) saveSessionData('gys_session_quick_auto', 'true');
             if (isQuickAutoTab) {
                 const handlePaymentAutoClick = () => setTimeout(() => {
                     const refundCheckbox = document.querySelector('input[name="agree_refund"]');
@@ -235,7 +248,7 @@
             return;
         }
         if (actionParam === 'refund') {
-            if (isFromPanelParam) safeSession.set('gys_quick_auto', 'true');
+            if (isFromPanelParam) saveSessionData('gys_session_quick_auto', 'true');
             return;
         }
         return;
@@ -288,10 +301,24 @@
             }
         }
 
-        async function checkTabSessionStatus() {
+        async function checkTabSessionStatus(isFirstLoad = false) {
             try {
-                const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
-                const memNo = responseText ? responseText.trim() : '';
+                const cachedMemNo = loadSessionData('gys_session_mem_no');
+                const cachedMemNm = loadSessionData('gys_session_mem_nm');
+                const cachedBarcode = loadSessionData('gys_session_mem_barcode');
+
+                if (win.MEM_NO && cachedMemNo === win.MEM_NO && cachedMemNm && cachedBarcode) {
+                    win.ISLOGIN = true;
+                    cachedMemberInfo = { name: cachedMemNm, barcode: cachedBarcode, facility: '고양체육관' };
+                    updateUserNameBtnLabel();
+                    return true;
+                }
+
+                let memNo = String(win.MEM_NO || '').trim();
+                if (!isFirstLoad) {
+                    const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
+                    memNo = responseText ? responseText.trim() : '';
+                }
 
                 if (!memNo || memNo.includes('login') || memNo.includes('로그인')) {
                     resetLoginState();
@@ -301,10 +328,6 @@
                 win.ISLOGIN = true;
                 win.MEM_NO = memNo;
 
-                const cachedMemNo = safeSession.get('gys_cached_mem_no');
-                const cachedMemNm = safeSession.get('gys_cached_mem_nm');
-                const cachedBarcode = safeSession.get('gys_cached_barcode');
-
                 if (cachedMemNo === memNo && cachedMemNm && cachedBarcode) {
                     cachedMemberInfo = { name: cachedMemNm, barcode: cachedBarcode, facility: '고양체육관' };
                     updateUserNameBtnLabel();
@@ -312,7 +335,7 @@
                 }
 
                 const htmlText = await fetchWithServerTime('/fmcs/221?_=' + Date.now(), 'text');
-                if (htmlText && !htmlText.includes('id="userId"') && !(htmlText.includes('로그인') && !htmlText.includes('bacordpop'))) {
+                if (htmlText) {
                     const nameMatch = htmlText.match(/<dt>([^<]+)<\/dt>/);
                     const barcodeMatch = htmlText.match(/JsBarcode\("#barcode_pop_[^"]+",\s*"([^"]+)"/);
                     const facilityMatch = htmlText.match(/<dd class="tt">([^<]+)<\/dd>/);
@@ -323,9 +346,9 @@
 
                     if (extractedName && extractedBarcode) {
                         cachedMemberInfo = { name: extractedName, barcode: extractedBarcode, facility: extractedFacility };
-                        safeSession.set('gys_cached_mem_no', memNo);
-                        safeSession.set('gys_cached_mem_nm', extractedName);
-                        safeSession.set('gys_cached_barcode', extractedBarcode);
+                        saveSessionData('gys_session_mem_no', memNo);
+                        saveSessionData('gys_session_mem_nm', extractedName);
+                        saveSessionData('gys_session_mem_barcode', extractedBarcode);
                         updateUserNameBtnLabel();
                         return true;
                     }
@@ -344,63 +367,15 @@
             updateUserNameBtnLabel();
         }
 
-        document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkTabSessionStatus(); });
-
-        function loadJsBarcodeScript() {
-            return new Promise((resolve) => {
-                if (win.JsBarcode) { resolve(win.JsBarcode); return; }
-                const script = document.createElement('script');
-                script.src = 'https://cdn.jsdelivr.net/jsbarcode/3.3.20/JsBarcode.all.min.js';
-                script.onload = () => resolve(win.JsBarcode);
-                script.onerror = () => resolve(null);
-                document.head.appendChild(script);
-            });
-        }
-
-        async function openMemberCardPopup() {
-            if (!(await checkTabSessionStatus()) || !cachedMemberInfo.barcode) {
-                alert('로그인이 필요한 서비스입니다.');
-                handleLoginRedirect();
-                return;
+        document.addEventListener('visibilitychange', async () => {
+            if (document.visibilityState === 'visible') {
+                const isLoggedIn = await checkTabSessionStatus(false);
+                if (isLoggedIn && loadSessionData('gys_session_change_resve') === 'true') {
+                    removeSessionData('gys_session_change_resve');
+                    await refreshUserReservationsAsync();
+                }
             }
-
-            let modalOverlay = document.getElementById('gys-card-modal-overlay');
-            if (!modalOverlay) {
-                modalOverlay = document.createElement('div');
-                modalOverlay.id = 'gys-card-modal-overlay';
-                Object.assign(modalOverlay.style, {
-                    position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
-                    backgroundColor: 'rgba(0, 0, 0, 0.7)', zIndex: '999999', display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box', padding: '15px'
-                });
-                modalOverlay.innerHTML = `
-                    <div style="background-color: #ffffff; width: 44em; max-width: 100%; border-radius: 4px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); overflow: hidden; font-family: 'Malgun Gothic', sans-serif;">
-                        <div style="background-color: #274081; color: #ffffff; padding: 12px 18px; display: flex; justify-content: space-between; align-items: center;">
-                            <p style="margin: 0; font-size: 16px; font-weight: 600; line-height: 1.2;">회원카드</p>
-                            <button id="gys-card-close-btn" style="background: none; border: none; color: #ffffff; font-size: 20px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
-                        </div>
-                        <div style="padding: 30px 20px; text-align: center; background-color: #ffffff;">
-                            <dl style="margin: 0; padding: 0;">
-                                <dt id="gys-card-name" style="font-size: 24px; font-weight: bold; color: #274081; margin-bottom: 8px;"></dt>
-                                <dd id="gys-card-facility" class="tt" style="margin: 0 0 20px 0; font-size: 16px; font-weight: bold; color: #333333;"></dd>
-                                <div style="background-color: #F0F0F0; padding: 12px; border-radius: 4px; font-size: 14px; color: #333333; margin-bottom: 25px; display: inline-block;">아래의 바코드를 스캐너에 인식시켜 주세요!</div>
-                                <dd class="img" style="margin: 0; display: flex; justify-content: center;"><svg id="gys-dynamic-barcode-svg"></svg></dd>
-                            </dl>
-                        </div>
-                    </div>`;
-                document.body.appendChild(modalOverlay);
-                document.getElementById('gys-card-close-btn').addEventListener('click', () => { modalOverlay.style.display = 'none'; });
-                modalOverlay.addEventListener('click', (e) => { if (e.target === modalOverlay) modalOverlay.style.display = 'none'; });
-            }
-
-            document.getElementById('gys-card-name').textContent = cachedMemberInfo.name;
-            document.getElementById('gys-card-facility').textContent = cachedMemberInfo.facility;
-            modalOverlay.style.display = 'flex';
-
-            const JsBarcodeFn = await loadJsBarcodeScript();
-            if (JsBarcodeFn) {
-                try { JsBarcodeFn("#gys-dynamic-barcode-svg", cachedMemberInfo.barcode, { height: 100, displayValue: true }); } catch (e) {}
-            }
-        }
+        });
 
         const PROGRAM_LIST_DEFAULT = [
             {"item_nm":"온라인 일일입장(경로/복지)","sale_amt":1650,"item_cd":"I000221"},
@@ -438,9 +413,6 @@
         }
 
         function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false, retryCount = 0) {
-            if (time_seq) safeLocal.set('gys_saved_time_seq', time_seq);
-            if (program_code) safeLocal.set('gys_saved_program_cd', program_code);
-
             return new Promise((resolve) => {
                 if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
@@ -509,12 +481,12 @@
 
         function initRealtimeClock() {
             const clockEl = document.getElementById('gys-realtime-clock');
-            const gaugeBarEl = document.getElementById('gys-ms-gauge-bar');
-            if (!clockEl || !gaugeBarEl) return;
+            const clockContainerEl = document.getElementById('gys-realtime-clock-container');
+            if (!clockEl || !clockContainerEl) return;
             const renderClockAndGauge = () => {
                 const now = new Date(Date.now() + serverTimeOffsetMs);
                 clockEl.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
-                gaugeBarEl.style.width = `${(now.getMilliseconds() / 1000) * 100}%`;
+                clockContainerEl.style.background = `linear-gradient(to right, #e2e8f0 ${(now.getMilliseconds() / 1000) * 100}%, #ffffff 0%)`;
                 requestAnimationFrame(renderClockAndGauge);
             };
             requestAnimationFrame(renderClockAndGauge);
@@ -538,26 +510,16 @@
         async function createCustomPanel() {
             if (document.getElementById('gys-custom-panel')) return;
 
-            await checkTabSessionStatus();
-
-            if (win.ISLOGIN) {
-                try {
-                    const resData = await fetchUserReservations();
-                    let newReservationsMap = {};
-                    if (Array.isArray(resData)) {
-                        resData.forEach(item => {
-                            if (String(item.app_type) === "30" && item.use_date && item.time_name) {
-                                newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
-                            }
-                        });
-                    }
-                    setSessionReservationsMap(newReservationsMap);
-                } catch (e) {}
-            }
+            await checkTabSessionStatus(true);
 
             applyResponsiveStyles();
 
-            const defaultYM = addMonthsToYM(getCurrentYM(), 1);
+            const settingResveDay = loadLocalData('gys_local_env_resve_day');
+            const nowForCheck = new Date(Date.now() + serverTimeOffsetMs);
+            const todayDayNum = String(nowForCheck.getDate()).padStart(2, '0');
+            const isTargetDay = (todayDayNum === settingResveDay);
+
+            const defaultYM = isTargetDay ? addMonthsToYM(getCurrentYM(), 1) : getCurrentYM();
             const defaultYMDot = formatYMWithDot(defaultYM);
             const todayHyphen = getTodayYMDHyphen();
             const todayMMDD = formatMMDD(todayHyphen);
@@ -571,23 +533,25 @@
             Object.assign(panel.style, { backgroundColor: '#ffffff', border: '1px solid #e0e0e0', padding: '8px 2px', fontFamily: 'Malgun Gothic, sans-serif', boxSizing: 'border-box', position: 'relative' });
 
             panel.innerHTML = `
-                <div style="display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 2px solid #274081; padding-bottom: 6px; margin-bottom: 8px; padding-left: 2px; padding-right: 2px;">
-                    <span style="font-weight: bold; font-size: 17.5px; color: #274081; line-height: 1.1;">⛳ 성저파크골프장 Quick 예약</span>
-                    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px; width: 75px;">
-                        <div style="width: 100%; height: 4px; background-color: #e2e8f0; border-radius: 2px; overflow: hidden;"><div id="gys-ms-gauge-bar" style="width: 0%; height: 100%; background-color: #28a745;"></div></div>
-                        <span id="gys-realtime-clock" style="font-size: 14.5px; color: #0056b3; font-family: monospace; font-weight: bold; line-height: 1;">00:00:00</span>
+                <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #274081; padding-bottom: 6px; margin-bottom: 8px; padding-left: 2px; padding-right: 2px;">
+                    <span style="font-weight: bold; font-size: 17.5px; color: #274081; line-height: 1.1; display: flex; align-items: center; height: 35px;">⛳ 성저파크골프장 Quick 예약</span>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <div id="gys-realtime-clock-container" style="display: ${isTargetDay ? 'flex' : 'none'}; align-items: center; justify-content: center; width: 75px; height: 35px; border: 1.5px solid #28a745; border-radius: 4px; overflow: hidden; background: #ffffff; box-sizing: border-box;">
+                            <span id="gys-realtime-clock" style="font-size: 13.5px; color: #0056b3; font-family: monospace; font-weight: bold; line-height: 1;">00:00:00</span>
+                        </div>
+                        <button id="gys-menu-btn" title="설정" style="width: 35px; height: 35px; background: transparent; border: none; cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center; padding: 0;">⚙️</button>
                     </div>
                 </div>
                 <div style="display: flex; align-items: center; justify-content: space-between; gap: 3px; margin-bottom: 10px; padding: 0 1px;">
                     <div style="display: flex; gap: 2px; align-items: center; flex-shrink: 0;">
-                        <button id="gys-prev-month-btn" style="width: 32px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&lt;</button>
+                        <button id="gys-prev-month-btn" style="width: 38px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&lt;</button>
                         <button id="gys-ym-reload-btn" style="width: 70px; height: 35px; border: 1.5px solid #274081; border-radius: 4px; font-weight: bold; font-size: 13px; background-color: #e8f4ff; color: #274081; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; box-sizing: border-box; line-height: 1.0;">${defaultYMDot}</button>
-                        <button id="gys-next-month-btn" style="width: 32px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&gt;</button>
+                        <button id="gys-next-month-btn" style="width: 38px; height: 35px; background-color: #6c757d; color: #ffffff; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; padding: 0;">&gt;</button>
                     </div>
                     <div style="display: flex; gap: 3px; align-items: center; flex-shrink: 0; position: relative;">
                         <button id="gys-user-name-btn" style="height: 35px; padding: 0 6px; background-color: #f8f9fa; border: 1.5px solid #274081; border-radius: 4px; cursor: pointer; font-size: 11.5px; font-weight: bold; color: #333333; display: flex; align-items: center; justify-content: center; line-height: 1.0;">${userNameBtnLabel}</button>
-                        <button id="gys-card-btn" style="height: 35px; padding: 0 6px; background-color: #f8f9fa; border: 1.5px solid #17a2b8; border-radius: 4px; cursor: pointer; font-size: 11px; font-weight: bold; color: #17a2b8; display: flex; align-items: center; justify-content: center; line-height: 1.0;">📊 회원카드</button>
-                        <button id="gys-menu-btn" title="추가 기능 메뉴" style="width: 35px; height: 35px; background-color: #f8f9fa; border: 1.5px solid #6c757d; border-radius: 4px; cursor: pointer; font-size: 15px; font-weight: bold; display: flex; align-items: center; justify-content: center; padding: 0; color: #333333;">☰</button>
+                        <button id="gys-refresh-res-btn" title="예약현황 새로고침" style="height: 35px; padding: 0 8px; background-color: #f8f9fa; border: 1.5px solid #28a745; border-radius: 4px; cursor: pointer; font-size: 11.5px; font-weight: bold; color: #28a745; display: flex; align-items: center; justify-content: center; gap: 4px; line-height: 1.0;">🔄 예약현황</button>
+                        <button id="gys-capture-btn" title="캡쳐" style="width: 35px; height: 35px; background-color: #f8f9fa; border: 1.5px solid #6c757d; border-radius: 4px; cursor: pointer; font-size: 16px; display: flex; align-items: center; justify-content: center; padding: 0;">📸</button>
                     </div>
                 </div>
                 <div style="margin-bottom: 8px; padding: 0 1px;">
@@ -608,6 +572,12 @@
                     <div id="gys-date-buttons-container" style="display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 1px; width: 100%; box-sizing: border-box;"></div>
                 </div>`;
 
+            let dayOptionsHtml = '';
+            for (let i = 1; i <= 31; i++) {
+                const ddStr = String(i).padStart(2, '0');
+                dayOptionsHtml += `<option value="${ddStr}" ${ddStr === settingResveDay ? 'selected' : ''}>매월 ${ddStr}일</option>`;
+            }
+
             const popupOverlay = document.createElement('div');
             popupOverlay.id = 'gys-smartphone-modal-overlay';
             Object.assign(popupOverlay.style, {
@@ -620,19 +590,15 @@
             popupOverlay.innerHTML = `
                 <div style="background-color: #f8f9fa; width: 270px; height: 360px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
-                        <span style="font-size: 13px; font-weight: bold;">Quick 메뉴</span>
+                        <span style="font-size: 13px; font-weight: bold;">설정</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                     </div>
                     <div style="background-color: #ffffff; padding: 20px 14px; flex: 1; overflow-y: auto;">
-                        <div id="gys-app-icons-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; text-align: center;">
-                            <button id="gys-modal-capture-btn" style="background: transparent; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; box-sizing: border-box;">
-                                <div style="width: 48px; height: 48px; background-color: #e9ecef; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">📸</div>
-                                <span style="font-size: 11px; font-weight: bold; color: #333333; white-space: nowrap; line-height: 1.2; width: 100%; text-align: center;">스크린샷</span>
-                            </button>
-                            <button id="gys-modal-refresh-res-btn" style="background: transparent; border: none; padding: 0; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 6px; width: 100%; box-sizing: border-box;">
-                                <div style="width: 48px; height: 48px; background-color: #e9ecef; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 24px; flex-shrink: 0;">📋</div>
-                                <span style="font-size: 11px; font-weight: bold; color: #333333; white-space: nowrap; line-height: 1.2; width: 100%; text-align: center;">예약현황</span>
-                            </button>
+                        <div style="display: flex; flex-direction: column; gap: 8px;">
+                            <label style="font-size: 12px; font-weight: bold; color: #333333;">예약일 설정</label>
+                            <select id="gys-setting-resve-day-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
+                                ${dayOptionsHtml}
+                            </select>
                         </div>
                     </div>
                 </div>
@@ -651,97 +617,11 @@
                 document.body.appendChild(panel);
             }
 
-            initRealtimeClock();
-
-            const menuBtn = document.getElementById('gys-menu-btn');
-            menuBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                popupOverlay.style.display = popupOverlay.style.display === 'flex' ? 'none' : 'flex';
-            });
-
-            document.getElementById('gys-popup-close-btn').addEventListener('click', () => {
-                popupOverlay.style.display = 'none';
-            });
-            popupOverlay.addEventListener('click', (e) => {
-                if (e.target === popupOverlay) popupOverlay.style.display = 'none';
-            });
-
-            document.getElementById('gys-modal-capture-btn').addEventListener('click', () => {
-                popupOverlay.style.display = 'none';
-                capturePanelToPng();
-            });
-
-            document.getElementById('gys-modal-refresh-res-btn').addEventListener('click', async () => {
-                popupOverlay.style.display = 'none';
-                const isLoggedIn = await checkTabSessionStatus();
-                if (!isLoggedIn) {
-                    alert('로그인이 필요한 서비스입니다.');
-                    return;
-                }
-
-                clearSessionReservationsMap();
-                const resData = await fetchUserReservations();
-                let newReservationsMap = {};
-                if (Array.isArray(resData)) {
-                    resData.forEach(item => {
-                        if (String(item.app_type) === "30" && item.use_date && item.time_name) {
-                            newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
-                        }
-                    });
-                }
-                setSessionReservationsMap(newReservationsMap);
-                renderReservationStatusMap();
-                alert('예약현황이 새로고침되었습니다.');
-            });
-
-            document.getElementById('gys-card-btn').addEventListener('click', openMemberCardPopup);
-
-            async function updateProgramSelectOptions(targetDate, isManualClick = false) {
-                if (!win.ISLOGIN && isManualClick) { alert('로그인이 필요한 서비스입니다.'); handleLoginRedirect(); return; }
-                const selectEl = document.getElementById('gys-program-select');
-                if (!selectEl) return;
-                const currentVal = selectEl.value || safeLocal.get('gys_saved_program_cd') || "I000221";
-                const listToUse = (await fetchItemList(targetDate)) || PROGRAM_LIST_DEFAULT;
-
-                const fragment = document.createDocumentFragment();
-                listToUse.forEach(p => {
-                    const option = document.createElement('option');
-                    option.value = p.item_cd || p.item_code;
-                    option.textContent = formatProgramName(p.item_nm || p.item_name) + (p.sale_amt !== undefined ? ` (${p.sale_amt.toLocaleString()}원)` : '');
-                    if (option.value === currentVal) option.selected = true;
-                    fragment.appendChild(option);
-                });
-                selectEl.replaceChildren(fragment);
+            if (isTargetDay) {
+                initRealtimeClock();
             }
 
-            async function updateTimeSelectOptions(targetDate) {
-                const selectEl = document.getElementById('gys-time-select');
-                if (!selectEl) return;
-                const currentVal = selectEl.value || safeLocal.get('gys_saved_time_seq') || "";
-                const timeData = await fetchTimeSlots(targetDate);
-
-                const fragment = document.createDocumentFragment();
-                if (Array.isArray(timeData) && timeData.length > 0) {
-                    timeData.forEach(item => {
-                        const option = document.createElement('option');
-                        option.value = item.seq; option.textContent = `${item.time_nm} | ${item.timep}`;
-                        if (String(item.seq) === String(currentVal)) option.selected = true;
-                        fragment.appendChild(option);
-                    });
-                } else {
-                    const emptyOpt = document.createElement('option'); emptyOpt.value = ""; emptyOpt.textContent = "조회된 시간대 없음";
-                    fragment.appendChild(emptyOpt);
-                }
-                selectEl.replaceChildren(fragment);
-            }
-
-            async function updateAllOptions(targetDate, isManualClick) {
-                const formattedHyphen = targetDate.includes('-') ? targetDate : `${targetDate.substring(0, 4)}-${targetDate.substring(4, 6)}-${targetDate.substring(6, 8)}`;
-                document.getElementById('gys-base-date-label').textContent = formatMMDD(formattedHyphen);
-                document.getElementById('gys-base-date-input').value = formattedHyphen;
-                await Promise.all([updateTimeSelectOptions(targetDate), updateProgramSelectOptions(targetDate, isManualClick)]);
-            }
-
+            // [수정 완료] renderReservationStatusMap 함수를 refreshUserReservationsAsync 보다 상단으로 이동시킴
             function renderReservationStatusMap() {
                 const ymBtn = document.getElementById('gys-ym-reload-btn');
                 if (!ymBtn) return;
@@ -768,6 +648,117 @@
                         }
                     }
                 });
+            }
+
+            async function refreshUserReservationsAsync() {
+                clearSessionReservationsMap();
+                const resData = await fetchUserReservations();
+                let newReservationsMap = {};
+                if (Array.isArray(resData)) {
+                    resData.forEach(item => {
+                        if (String(item.app_type) === "30" && item.use_date && item.time_name) {
+                            newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
+                        }
+                    });
+                }
+                setSessionReservationsMap(newReservationsMap);
+                renderReservationStatusMap();
+            }
+
+            const timeSelectEl = document.getElementById('gys-time-select');
+            if (timeSelectEl) {
+                timeSelectEl.addEventListener('change', function() {
+                    if (this.value) saveLocalData('gys_local_env_resve_time_seq', this.value);
+                });
+            }
+
+            const programSelectEl = document.getElementById('gys-program-select');
+            if (programSelectEl) {
+                programSelectEl.addEventListener('change', function() {
+                    if (this.value) saveLocalData('gys_local_env_program_cd', this.value);
+                });
+            }
+
+            const menuBtn = document.getElementById('gys-menu-btn');
+            menuBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                popupOverlay.style.display = popupOverlay.style.display === 'flex' ? 'none' : 'flex';
+            });
+
+            document.getElementById('gys-popup-close-btn').addEventListener('click', () => {
+                popupOverlay.style.display = 'none';
+            });
+            popupOverlay.addEventListener('click', (e) => {
+                if (e.target === popupOverlay) popupOverlay.style.display = 'none';
+            });
+
+            const resveDaySelectEl = document.getElementById('gys-setting-resve-day-select');
+            if (resveDaySelectEl) {
+                resveDaySelectEl.addEventListener('change', function() {
+                    saveLocalData('gys_local_env_resve_day', this.value);
+                    alert(`예약일이 매월 ${this.value}일로 설정되었습니다. (페이지를 새로고침하면 시계 노출 여부에 반영됩니다)`);
+                });
+            }
+
+            document.getElementById('gys-capture-btn').addEventListener('click', () => {
+                capturePanelToPng();
+            });
+
+            document.getElementById('gys-refresh-res-btn').addEventListener('click', async () => {
+                const isLoggedIn = await checkTabSessionStatus(false);
+                if (!isLoggedIn) {
+                    alert('로그인이 필요한 서비스입니다.');
+                    return;
+                }
+
+                await refreshUserReservationsAsync();
+                alert('예약현황이 새로고침되었습니다.');
+            });
+
+            async function updateProgramSelectOptions(targetDate, isManualClick = false) {
+                if (!win.ISLOGIN && isManualClick) { alert('로그인이 필요한 서비스입니다.'); handleLoginRedirect(); return; }
+                const selectEl = document.getElementById('gys-program-select');
+                if (!selectEl) return;
+                const currentVal = selectEl.value || loadLocalData('gys_local_env_program_cd');
+                const listToUse = (await fetchItemList(targetDate)) || PROGRAM_LIST_DEFAULT;
+
+                const fragment = document.createDocumentFragment();
+                listToUse.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.item_cd || p.item_code;
+                    option.textContent = formatProgramName(p.item_nm || p.item_name) + (p.sale_amt !== undefined ? ` (${p.sale_amt.toLocaleString()}원)` : '');
+                    if (option.value === currentVal) option.selected = true;
+                    fragment.appendChild(option);
+                });
+                selectEl.replaceChildren(fragment);
+            }
+
+            async function updateTimeSelectOptions(targetDate) {
+                const selectEl = document.getElementById('gys-time-select');
+                if (!selectEl) return;
+                const currentVal = selectEl.value || loadLocalData('gys_local_env_resve_time_seq');
+                const timeData = await fetchTimeSlots(targetDate);
+
+                const fragment = document.createDocumentFragment();
+                if (Array.isArray(timeData) && timeData.length > 0) {
+                    timeData.forEach(item => {
+                        const option = document.createElement('option');
+                        option.value = item.seq; option.textContent = `${item.time_nm} | ${item.timep}`;
+                        if (String(item.seq) === String(currentVal)) option.selected = true;
+                        fragment.appendChild(option);
+                    });
+                } else {
+                    const emptyOpt = document.createElement('option'); emptyOpt.value = ""; emptyOpt.textContent = "조회된 시간대 없음";
+                    fragment.appendChild(emptyOpt);
+                }
+                selectEl.replaceChildren(fragment);
+            }
+
+            async function updateAllOptions(targetDate, isManualClick) {
+                const formattedHyphen = targetDate.includes('-') ? targetDate : `${targetDate.substring(0, 4)}-${targetDate.substring(4, 6)}-${targetDate.substring(6, 8)}`;
+                document.getElementById('gys-base-date-label').textContent = formatMMDD(formattedHyphen);
+                document.getElementById('gys-base-date-input').value = formattedHyphen;
+                await Promise.all([updateTimeSelectOptions(targetDate), updateProgramSelectOptions(targetDate, isManualClick)]);
             }
 
             async function loadDateList() {
@@ -800,7 +791,9 @@
                     return !(dayOfWeek === 2 || hasClose || item.state_cd === "30" || stateText.includes('휴관') || stateText.includes('대회'));
                 })?.date || currentMonthItems[0]?.date || "";
 
-                if (firstWorkDateHyphen) await updateAllOptions(firstWorkDateHyphen, false);
+                if (firstWorkDateHyphen) {
+                    await updateAllOptions(firstWorkDateHyphen, false);
+                }
 
                 btnContainer.innerHTML = '';
                 const prevMonthLastDay = new Date(curYear, curMonth, 0).getDate();
@@ -828,13 +821,13 @@
 
                     const hasCloseAdvice = item.close_advice && item.close_advice.trim() !== '';
                     const rawStateText = hasCloseAdvice ? item.close_advice.trim() : (item.state_nm || '');
-                    const isHolidayReason = item.state_cd === "30";
+                    const isHolidayReason = (item.state_cd === "30" || hasCloseAdvice);
 
                     if (isHolidayReason) {
                         const closedBtn = document.createElement('button');
                         closedBtn.disabled = true;
 
-                        const holidayLabel = isHolidayReason ? rawStateText : '';
+                        const holidayLabel = rawStateText;
 
                         closedBtn.innerHTML = '' +
                             '<div style="font-size: 14.5px; font-weight: bold; color: ' + textColor + '; text-align: center; line-height: 1.0; pointer-events: none;">' + dayNum + '</div>' +
@@ -858,7 +851,7 @@
                         return;
                     }
 
-					const dateBtn = document.createElement('button');
+                    const dateBtn = document.createElement('button');
                     dateBtn.className = 'gys-dynamic-date-btn';
                     dateBtn.dataset.resveDate = formattedResveDate;
 
@@ -875,7 +868,6 @@
                     dateBtn.onmouseover = () => { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#e8f4ff'; };
                     dateBtn.onmouseout = () => { if (!dateBtn.disabled) dateBtn.style.backgroundColor = '#ffffff'; };
 
-                    // 꾹 누르기(Long-press) 관련 변수 및 타이머 설정
                     let pressTimer = null;
                     let isLongPress = false;
 
@@ -920,7 +912,6 @@
                         }
                     };
 
-                    // 마우스 및 터치 이벤트 바인딩
                     dateBtn.addEventListener('mousedown', startLongPressCheck);
                     dateBtn.addEventListener('mouseup', cancelLongPressCheck);
                     dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
@@ -929,7 +920,6 @@
                     dateBtn.addEventListener('touchend', cancelLongPressCheck);
                     dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
 
-                    // 일반 클릭 이벤트 (꾹 누르기가 발동된 경우 클릭 실행 차단)
                     dateBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
                         if (isLongPress) {
@@ -1013,6 +1003,10 @@
             document.getElementById('gys-next-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), 1)); loadDateList(); });
 
             await loadDateList();
+
+            if (win.ISLOGIN) {
+                refreshUserReservationsAsync().catch(e => {});
+            }
         }
 
         window.addEventListener('load', async () => {
@@ -1021,7 +1015,7 @@
             const resveDateParam = urlParams.get('resve_date');
 
             if (resveDateParam && timeSeq) {
-                if (!(await checkTabSessionStatus())) { handleLoginRedirect(true); return; }
+                if (!(await checkTabSessionStatus(false))) { handleLoginRedirect(true); return; }
                 await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true);
             } else if (Array.from(urlParams.keys()).length === 0) {
                 createCustomPanel();

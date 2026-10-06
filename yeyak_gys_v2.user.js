@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
+// @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.6.5
-// @description  refreshUserReservationsAsync 스코프 오류 수정 버전
+// @version      0.6.6
+// @description  시간대 콤보박스 롱프레스 시 option value | text 목록 확인 기능 추가
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
@@ -19,8 +19,8 @@
     const win = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
     let serverTimeOffsetMs = 0;
-	
-	let tempReservationsMap = null;
+    
+    let tempReservationsMap = null;
 
     // 로컬 스토리지 기본값 상수 맵 정의
     const LOCAL_DEFAULT_VALUES = {
@@ -42,7 +42,7 @@
     };
     const saveLocalData = (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} };
     const removeLocalData = (key) => { try { win.localStorage.removeItem(key); } catch (e) {} };
-	
+    
 
     function getLocalReservationsMap() {
         const jsonStr = loadLocalData('gys_local_reservations_map');
@@ -56,7 +56,7 @@
     function setLocalReservationsMap(mapObj) {
         saveLocalData('gys_local_reservations_map', JSON.stringify(mapObj));
     }
-	
+    
     function getCachedMemberName(memNo) {
         if (!memNo) return null;
         try {
@@ -84,7 +84,7 @@
     function removeAllLocal() {
         removeLocalData('gys_local_mem_no');
         removeLocalData('gys_local_mem_nm');
-		removeLocalData('gys_local_reservations_map');
+        removeLocalData('gys_local_reservations_map');
     }
 
     if (window.location.pathname === '/fmcs/27' || window.location.pathname.includes('/fmcs/31')) {
@@ -276,14 +276,14 @@
             if (isQuickAutoTab) {
                 const handleRefundAutoClick = () => setTimeout(() => {
                     const refundBtn = document.getElementById('refundBtn');
-					if (refundBtn) {
+                    if (refundBtn) {
                         refundBtn.click();
                         refundBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
                     }
                 }, 400);
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRefundAutoClick);
                 else handleRefundAutoClick();
-			}
+            }
             return;
         }
         return;
@@ -337,11 +337,10 @@
             }
         }
 
-		async function checkTabSessionStatus(isFirstLoad = false) {
+        async function checkTabSessionStatus(isFirstLoad = false) {
             try {
                 let memNo = String(win.MEM_NO || '').trim();
 
-                // 1. 첫 로드가 아니고 win.MEM_NO가 없으면 서버에서 회원번호 먼저 획득
                 if (!isFirstLoad && !memNo) {
                     const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
                     memNo = responseText ? responseText.trim() : '';
@@ -355,7 +354,6 @@
                 win.ISLOGIN = true;
                 win.MEM_NO = memNo;
 
-                // 2. 현재 세션의 회원번호에 대한 이름이 로컬 캐시에 이미 있는지 확인
                 const cachedName = getCachedMemberName(memNo);
                 if (cachedName) {
                     saveLocalData('gys_local_mem_no', memNo);
@@ -364,7 +362,6 @@
                     return true;
                 }
 
-                // 3. 캐시에 없을 때만 /fmcs/221 호출 (최소화)
                 const htmlText = await fetchWithServerTime('/fmcs/221?_=' + Date.now(), 'text');
                 if (htmlText) {
                     const nameMatch = htmlText.match(/<dt>([^<]+)<\/dt>/);
@@ -374,7 +371,6 @@
                         saveLocalData('gys_local_mem_no', memNo);
                         saveLocalData('gys_local_mem_nm', extractedName);
                         
-                        // 💡 회원번호 맵 캐시에 영구 저장 (user['12345678'] = '홍길동' 형태)
                         setCachedMemberName(memNo, extractedName);
 
                         updateUserNameBtnLabel();
@@ -404,7 +400,6 @@
         };
         const fetchUserReservations = () => win.ISLOGIN ? fetchWithServerTime(`/rest/dailyuse/use_list?company_code=&member_code=${win.MEM_NO || ''}&status_code=1&_=` + Date.now()) : Promise.resolve(null);
 
-        // 공용 렌더링 및 동기화 함수 (전역 스코프 배치)
         function renderReservationStatusMap() {
             const ymBtn = document.getElementById('gys-ym-reload-btn');
             if (!ymBtn) return;
@@ -454,23 +449,23 @@
                 const isLoggedIn = await checkTabSessionStatus(false);
                 if (isLoggedIn && changeFlag === 'true') {
                     removeLocalData('gys_local_change_resve');
-					
-					if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.type) {
-						let reservationsMap = getLocalReservationsMap();
-						
-						if(tempReservationsMap.type === 'assign') {
-							reservationsMap[tempReservationsMap.resve_date] = { 
-								type: 'manual', 
-								time_name: tempReservationsMap.time_name
-							};
-						} else {
-							delete reservationsMap[tempReservationsMap.resve_date];
-						}
-						
-						setLocalReservationsMap(reservationsMap);
-						renderReservationStatusMap();
-					}
-					tempReservationsMap = null;
+                    
+                    if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.type) {
+                        let reservationsMap = getLocalReservationsMap();
+                        
+                        if(tempReservationsMap.type === 'assign') {
+                            reservationsMap[tempReservationsMap.resve_date] = { 
+                                type: 'manual', 
+                                time_name: tempReservationsMap.time_name
+                            };
+                        } else {
+                            delete reservationsMap[tempReservationsMap.resve_date];
+                        }
+                        
+                        setLocalReservationsMap(reservationsMap);
+                        renderReservationStatusMap();
+                    }
+                    tempReservationsMap = null;
                 }
             }
         });
@@ -700,6 +695,42 @@
                 timeSelectEl.addEventListener('change', function() {
                     if (this.value) saveLocalData('gys_local_env_resve_time_seq', this.value);
                 });
+
+                // 💡 [추가 기능] 시간대 콤보박스 롱프레스 시 옵션 목록(value | text) 확인 로직
+                let timePressTimer = null;
+                const START_LONG_PRESS_TIME = 700; // 0.7초 이상 누르고 있을 때
+
+                const startTimeLongPress = (e) => {
+                    timePressTimer = setTimeout(() => {
+                        const options = timeSelectEl.options;
+                        if (!options || options.length === 0) {
+                            alert("조회된 시간대 옵션이 없습니다.");
+                            return;
+                        }
+                        let resultList = [];
+                        for (let i = 0; i < options.length; i++) {
+                            const opt = options[i];
+                            resultList.push(`value: ${opt.value} | text: ${opt.text}`);
+                        }
+                        
+                        // 보기 편하게 개행문자로 합쳐서 alert 출력 (필요시 모달창으로 확장 가능)
+                        alert(`[시간대 콤보박스 옵션 전체 목록]\n\n` + resultList.join('\n'));
+                    }, START_LONG_PRESS_TIME);
+                };
+
+                const cancelTimeLongPress = () => {
+                    if (timePressTimer) {
+                        clearTimeout(timePressTimer);
+                        timePressTimer = null;
+                    }
+                };
+
+                timeSelectEl.addEventListener('mousedown', startTimeLongPress);
+                timeSelectEl.addEventListener('mouseup', cancelTimeLongPress);
+                timeSelectEl.addEventListener('mouseleave', cancelTimeLongPress);
+                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: true });
+                timeSelectEl.addEventListener('touchend', cancelTimeLongPress);
+                timeSelectEl.addEventListener('touchcancel', cancelTimeLongPress);
             }
 
             const programSelectEl = document.getElementById('gys-program-select');
@@ -939,12 +970,12 @@
                             if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
                                 const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
                                 openUrlInNewTab(refundUrl);
-								
-								tempReservationsMap = {
-									'type': 'delete',
-									'resve_date': useDate.replace(/-/g, ''),
-									'time_name': timeName
-								};
+                                
+                                tempReservationsMap = {
+                                    'type': 'delete',
+                                    'resve_date': useDate.replace(/-/g, ''),
+                                    'time_name': timeName
+                                };
                             }
                         }, 700);
                     };
@@ -1004,13 +1035,13 @@
                         if (!selectedTimeSeq || !selectedProgramCode) { alert('로그인이 필요한 서비스입니다.'); return; }
 
                         dateBtn.disabled = true;
-						if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
-							
-							tempReservationsMap = {
-								'type': 'assign',
-								'resve_date': formattedResveDate,
-								'time_name': selectedTimeText
-							};
+                        if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
+                            
+                            tempReservationsMap = {
+                                'type': 'assign',
+                                'resve_date': formattedResveDate,
+                                'time_name': selectedTimeText
+                            };
                         } else {
                             dateBtn.style.backgroundColor = '#f8d7da';
                         }

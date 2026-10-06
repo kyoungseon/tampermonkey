@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.6.1
+// @version      0.6.2
 // @description  refreshUserReservationsAsync 스코프 오류 수정 버전
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -431,6 +431,7 @@
 							time_name: tempReservationsMap.time_name || '' 
 						};
 						setLocalReservationsMap(reservationsMap);
+						renderReservationStatusMap();
 					}
 					tempReservationsMap = null;
                 }

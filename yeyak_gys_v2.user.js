@@ -1,11 +1,12 @@
 // ==UserScript==
-// @name         고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
+// @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.5.87
-// @description  renderReservationStatusMap 스코프 위치 조정 및 에러 해결 완료
+// @version      0.6.1
+// @description  refreshUserReservationsAsync 스코프 오류 수정 버전
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
 // @match        https://yeyak.gys.or.kr/fmcs/102?*
+// @match        https://yeyak.gys.or.kr/fmcs/122?*
 // @match        https://yeyak.gys.or.kr/fmcs/27*
 // @grant        window.close
 // @grant        unsafeWindow
@@ -18,7 +19,8 @@
     const win = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
 
     let serverTimeOffsetMs = 0;
-    let cachedMemberInfo = { name: '', barcode: '', facility: '고양체육관' };
+	
+	let tempReservationsMap = null;
 
     // 로컬 스토리지 기본값 상수 맵 정의
     const LOCAL_DEFAULT_VALUES = {
@@ -28,24 +30,22 @@
     };
 
     // 스토리지 입출력 통합 함수
-    const loadSessionData = (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } };
-    const saveSessionData = (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} };
-    const removeSessionData = (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} };
-
     const loadLocalData = (key) => {
         try {
             let val = win.localStorage.getItem(key);
-            if (!val) {
-                val = LOCAL_DEFAULT_VALUES[key] !== undefined ? LOCAL_DEFAULT_VALUES[key] : '';
+            if (!val && LOCAL_DEFAULT_VALUES[key] !== undefined) {
+                val = LOCAL_DEFAULT_VALUES[key];
                 win.localStorage.setItem(key, val);
             }
             return val;
-        } catch (e) { return LOCAL_DEFAULT_VALUES[key] || ''; }
+        } catch (e) { return LOCAL_DEFAULT_VALUES[key] || null; }
     };
     const saveLocalData = (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} };
+    const removeLocalData = (key) => { try { win.localStorage.removeItem(key); } catch (e) {} };
+	
 
-    function getSessionReservationsMap() {
-        const jsonStr = loadSessionData('gys_session_reservations_map');
+    function getLocalReservationsMap() {
+        const jsonStr = loadLocalData('gys_local_reservations_map');
         if (!jsonStr) return {};
         try {
             const parsed = JSON.parse(jsonStr);
@@ -53,19 +53,18 @@
         } catch (e) { return {}; }
     }
 
-    function setSessionReservationsMap(mapObj) {
-        saveSessionData('gys_session_reservations_map', JSON.stringify(mapObj));
+    function setLocalReservationsMap(mapObj) {
+        saveLocalData('gys_local_reservations_map', JSON.stringify(mapObj));
     }
 
-    function clearSessionReservationsMap() {
-        removeSessionData('gys_session_reservations_map');
-        removeSessionData('gys_session_mem_no');
-        removeSessionData('gys_session_mem_nm');
-        removeSessionData('gys_session_mem_barcode');
+    function removeAllLocal() {
+        removeLocalData('gys_local_mem_no');
+        removeLocalData('gys_local_mem_nm');
+		removeLocalData('gys_local_reservations_map');
     }
 
     if (window.location.pathname === '/fmcs/27' || window.location.pathname.includes('/fmcs/31')) {
-        clearSessionReservationsMap();
+        removeAllLocal();
     }
 
     function parseTimeTo4Lines(rawText) {
@@ -173,7 +172,8 @@
 
             const ymBtn = document.getElementById('gys-ym-reload-btn');
             const selectedYM = ymBtn ? parseYMFromDot(ymBtn.textContent.trim()) : getCurrentYM();
-            const fileName = `${selectedYM}_${cachedMemberInfo.name || '미로그인'}_${getFormattedYMDHM()}.png`;
+            const currentMemName = loadLocalData('gys_local_mem_nm') || '미로그인';
+            const fileName = `${selectedYM}_${currentMemName}_${getFormattedYMDHM()}.png`;
 
             canvas.toBlob(async (blob) => {
                 if (!blob) { alert('이미지 생성에 실패했습니다.'); return; }
@@ -182,7 +182,7 @@
                     if (navigator.share && navigator.canShare) {
                         const file = new File([blob], fileName, { type: 'image/png' });
                         if (navigator.canShare({ files: [file] })) {
-                            await navigator.share({ files: [file], title: '성저파크골프장 예약 캡쳐', text: `[${cachedMemberInfo.name}] 성저파크골프장 Quick 예약 현황` });
+                            await navigator.share({ files: [file], title: '성저파크골프장 예약 캡쳐', text: `[${currentMemName}] 성저파크골프장 Quick 예약 현황` });
                             shareSuccess = true;
                         }
                     }
@@ -199,21 +199,21 @@
     }
 
     if (actionParam) {
-        const isQuickAutoTab = isFromPanelParam || loadSessionData('gys_session_quick_auto') === 'true';
+        const isQuickAutoTab = isFromPanelParam || loadLocalData('gys_local_quick_auto') === 'true';
         if (actionParam === 'paymentResult' && isQuickAutoTab) {
-            saveSessionData('gys_session_change_resve', 'true');
+            saveLocalData('gys_local_change_resve', 'true');
             try { if (win.opener) win.opener = null; } catch (e) {}
             win.alert = (msg) => {
-                removeSessionData('gys_session_quick_auto');
+                removeLocalData('gys_local_quick_auto');
                 if (confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?")) win.close();
                 else win.stop && win.stop();
             };
             return;
         }
         if (actionParam === 'reg_read') {
-            saveSessionData('gys_session_change_resve', 'true');
+            saveLocalData('gys_local_change_resve', 'true');
             if (isQuickAutoTab) {
-                removeSessionData('gys_session_quick_auto');
+                removeLocalData('gys_local_quick_auto');
 
                 const isRefundPath = currentPath.includes('/fmcs/122');
                 const alertMsg = isRefundPath
@@ -230,7 +230,7 @@
             return;
         }
         if (actionParam === 'write') {
-            if (isFromPanelParam) saveSessionData('gys_session_quick_auto', 'true');
+            if (isFromPanelParam) saveLocalData('gys_local_quick_auto', 'true');
             if (isQuickAutoTab) {
                 const handlePaymentAutoClick = () => setTimeout(() => {
                     const refundCheckbox = document.querySelector('input[name="agree_refund"]');
@@ -248,7 +248,18 @@
             return;
         }
         if (actionParam === 'refund') {
-            if (isFromPanelParam) saveSessionData('gys_session_quick_auto', 'true');
+            if (isFromPanelParam) saveLocalData('gys_local_quick_auto', 'true');
+            if (isQuickAutoTab) {
+                const handleRefundAutoClick = () => setTimeout(() => {
+                    const refundBtn = document.getElementById('refundBtn');
+					if (refundBtn) {
+                        refundBtn.click();
+                        refundBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                    }
+                }, 400);
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRefundAutoClick);
+                else handleRefundAutoClick();
+			}
             return;
         }
         return;
@@ -270,7 +281,7 @@
     } else if (currentPath === '/fmcs/102') {
 
         function handleLoginRedirect(isAuto = false) {
-            clearSessionReservationsMap();
+            removeAllLocal();
             const currentUrl = new URL(window.location.href);
             if (isAuto) currentUrl.searchParams.set('autologin', 'true');
             window.location.href = '/fmcs/27?referer=' + encodeURIComponent(currentUrl.toString());
@@ -280,8 +291,9 @@
         function updateUserNameBtnLabel() {
             const userNameBtn = document.getElementById('gys-user-name-btn');
             if (!userNameBtn) return;
-            if (cachedMemberInfo.name && win.ISLOGIN) {
-                userNameBtn.innerHTML = `👤 <span style="color: #274081; line-height: 1.0;">${cachedMemberInfo.name}</span>`;
+            const currentMemName = loadLocalData('gys_local_mem_nm');
+            if (currentMemName && win.ISLOGIN) {
+                userNameBtn.innerHTML = `👤 <span style="color: #274081; line-height: 1.0;">${currentMemName}</span>`;
                 userNameBtn.title = "클릭 시 로그아웃 후 자동로그인";
             } else {
                 userNameBtn.innerHTML = `🔑 로그인`;
@@ -303,13 +315,11 @@
 
         async function checkTabSessionStatus(isFirstLoad = false) {
             try {
-                const cachedMemNo = loadSessionData('gys_session_mem_no');
-                const cachedMemNm = loadSessionData('gys_session_mem_nm');
-                const cachedBarcode = loadSessionData('gys_session_mem_barcode');
+                const cachedMemNo = loadLocalData('gys_local_mem_no');
+                const cachedMemNm = loadLocalData('gys_local_mem_nm');
 
-                if (win.MEM_NO && cachedMemNo === win.MEM_NO && cachedMemNm && cachedBarcode) {
+                if (win.MEM_NO && cachedMemNo === win.MEM_NO && cachedMemNm) {
                     win.ISLOGIN = true;
-                    cachedMemberInfo = { name: cachedMemNm, barcode: cachedBarcode, facility: '고양체육관' };
                     updateUserNameBtnLabel();
                     return true;
                 }
@@ -320,16 +330,10 @@
                     memNo = responseText ? responseText.trim() : '';
                 }
 
-                if (!memNo || memNo.includes('login') || memNo.includes('로그인')) {
-                    resetLoginState();
-                    return false;
-                }
-
                 win.ISLOGIN = true;
                 win.MEM_NO = memNo;
 
-                if (cachedMemNo === memNo && cachedMemNm && cachedBarcode) {
-                    cachedMemberInfo = { name: cachedMemNm, barcode: cachedBarcode, facility: '고양체육관' };
+                if (cachedMemNo === memNo && cachedMemNm) {
                     updateUserNameBtnLabel();
                     return true;
                 }
@@ -337,18 +341,11 @@
                 const htmlText = await fetchWithServerTime('/fmcs/221?_=' + Date.now(), 'text');
                 if (htmlText) {
                     const nameMatch = htmlText.match(/<dt>([^<]+)<\/dt>/);
-                    const barcodeMatch = htmlText.match(/JsBarcode\("#barcode_pop_[^"]+",\s*"([^"]+)"/);
-                    const facilityMatch = htmlText.match(/<dd class="tt">([^<]+)<\/dd>/);
+                    const extractedName = nameMatch ? nameMatch[1].trim() : '';
 
-                    const extractedName = nameMatch ? nameMatch[1].trim() : '회원';
-                    const extractedBarcode = barcodeMatch ? barcodeMatch[1].trim() : memNo;
-                    const extractedFacility = facilityMatch ? facilityMatch[1].trim() : '고양체육관';
-
-                    if (extractedName && extractedBarcode) {
-                        cachedMemberInfo = { name: extractedName, barcode: extractedBarcode, facility: extractedFacility };
-                        saveSessionData('gys_session_mem_no', memNo);
-                        saveSessionData('gys_session_mem_nm', extractedName);
-                        saveSessionData('gys_session_mem_barcode', extractedBarcode);
+                    if (extractedName) {
+                        saveLocalData('gys_local_mem_no', memNo);
+                        saveLocalData('gys_local_mem_nm', extractedName);
                         updateUserNameBtnLabel();
                         return true;
                     }
@@ -362,17 +359,80 @@
         function resetLoginState() {
             win.ISLOGIN = false;
             win.MEM_NO = '';
-            clearSessionReservationsMap();
-            cachedMemberInfo = { name: '', barcode: '', facility: '고양체육관' };
+            removeAllLocal();
             updateUserNameBtnLabel();
+            renderReservationStatusMap();
+        }
+
+        const fetchMonthStateList = (ym) => fetchWithServerTime(`/rest/dailyuse/mon_state_list?company_code=GYS10&part_code=03&resve_mon=${ym}&_=` + Date.now());
+        const fetchTimeSlots = (targetDate) => fetchWithServerTime(`/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=${getValidTargetDate(targetDate)}&_=` + Date.now());
+        const fetchItemList = async (targetDate) => {
+            if (!win.ISLOGIN) return null;
+            const data = await fetchWithServerTime(`/rest/dailyuse/item_list?company_code=GYS10&resve_part_code=03&resve_date=${getValidTargetDate(targetDate)}&member_code=&_=` + Date.now());
+            return Array.isArray(data) && data.length > 0 ? data : null;
+        };
+        const fetchUserReservations = () => win.ISLOGIN ? fetchWithServerTime(`/rest/dailyuse/use_list?company_code=&member_code=${win.MEM_NO || ''}&status_code=1&_=` + Date.now()) : Promise.resolve(null);
+
+        // 공용 렌더링 및 동기화 함수 (전역 스코프 배치)
+        function renderReservationStatusMap() {
+            const ymBtn = document.getElementById('gys-ym-reload-btn');
+            if (!ymBtn) return;
+            const currentCalYM = parseYMFromDot(ymBtn.textContent.trim());
+            document.querySelectorAll('.gys-dynamic-date-btn .gys-info-badge').forEach(badge => { badge.innerHTML = ''; });
+            const reservationsByDate = getLocalReservationsMap();
+
+            Object.keys(reservationsByDate).forEach(pureDate => {
+                if (pureDate.substring(0, 6) === currentCalYM) {
+                    const resObj = reservationsByDate[pureDate];
+                    const dateBtn = document.querySelector(`.gys-dynamic-date-btn[data-resve-date="${pureDate}"]`);
+                    if (dateBtn && resObj?.time_name) {
+                        const infoBadge = dateBtn.querySelector('.gys-info-badge');
+                        if (infoBadge) {
+                            const parsedObj = parseTimeTo4Lines(resObj.time_name);
+                            const isServer = resObj.type === 'server';
+                            infoBadge.innerHTML = `
+                                <div style="background-color: ${isServer ? '#2e7d32' : '#1565c0'}; border: 1px solid ${isServer ? '#1b5e20' : '#0d47a1'}; color: #ffffff; border-radius: 4px; padding: 4px 0; margin-top: 1px; width: 98%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
+                                    ${parsedObj.part ? `<span style="font-size: 11.5px; font-weight: 700; margin-bottom: 4px;">${parsedObj.part}</span>` : ''}
+                                    <span style="font-size: 11px; font-weight: 400;">${parsedObj.startTime}</span>
+                                    ${parsedObj.endTime ? `<span style="font-size: 8px; font-weight: bold; opacity: 0.8; margin: -2px 0;">~</span><span style="font-size: 11px; font-weight: 400;">${parsedObj.endTime}</span>` : ''}
+                                </div>`;
+                        }
+                    }
+                }
+            });
+        }
+
+        async function refreshUserReservationsAsync() {
+            removeLocalData('gys_local_reservations_map');
+            const resData = await fetchUserReservations();
+            let newReservationsMap = {};
+            if (Array.isArray(resData)) {
+                resData.forEach(item => {
+                    if (String(item.app_type) === "30" && item.use_date && item.time_name) {
+                        newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
+                    }
+                });
+            }
+            setLocalReservationsMap(newReservationsMap);
+            renderReservationStatusMap();
         }
 
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible') {
+                const changeFlag = loadLocalData('gys_local_change_resve');
                 const isLoggedIn = await checkTabSessionStatus(false);
-                if (isLoggedIn && loadSessionData('gys_session_change_resve') === 'true') {
-                    removeSessionData('gys_session_change_resve');
-                    await refreshUserReservationsAsync();
+                if (isLoggedIn && changeFlag === 'true') {
+                    removeLocalData('gys_local_change_resve');
+					
+					if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.resve_date) {
+						let reservationsMap = getLocalReservationsMap();
+						reservationsMap[tempReservationsMap.resve_date] = { 
+							type: 'manual', 
+							time_name: tempReservationsMap.time_name || '' 
+						};
+						setLocalReservationsMap(reservationsMap);
+					}
+					tempReservationsMap = null;
                 }
             }
         });
@@ -386,7 +446,7 @@
             {"item_nm":"온라인 관외할증(군인/청소년)","sale_amt":3300,"item_cd":"I000226"}
         ];
 
-        function openPaymentInNewTab(url) {
+        function openUrlInNewTab(url) {
             const form = document.createElement('form');
             form.method = 'GET'; form.action = url.split('?')[0]; form.target = '_blank';
             url.split('?')[1]?.split('&').forEach(param => {
@@ -399,20 +459,7 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
-        function openRefundInNewTab(url) {
-            const form = document.createElement('form');
-            form.method = 'GET'; form.action = url.split('?')[0]; form.target = '_blank';
-            url.split('?')[1]?.split('&').forEach(param => {
-                const [k, v] = param.split('=');
-                const input = document.createElement('input'); input.type = 'hidden'; input.name = k; input.value = decodeURIComponent(v);
-                form.appendChild(input);
-            });
-            const panelParamInput = document.createElement('input'); panelParamInput.type = 'hidden'; panelParamInput.name = 'from_panel'; panelParamInput.value = 'true';
-            form.appendChild(panelParamInput);
-            document.body.appendChild(form); form.submit(); document.body.removeChild(form);
-        }
-
-        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false, retryCount = 0) {
+        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
             return new Promise((resolve) => {
                 if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
@@ -423,17 +470,14 @@
                 const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO || ''}&user_cnt=1&_=` + Date.now();
 
                 const handleResponseData = (data) => {
-                    if (data.result_code != 0 && retryCount < 2) {
-                        setTimeout(() => custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve), 300);
-                        return;
-                    }
                     if (data.result_code != 0) {
                         alert(data.result_message || '예약에 실패했습니다.');
-                        resolve(false); return;
+                        resolve(false);
+                        return;
                     }
                     const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}&from_panel=true`;
                     if (isAutoLink) window.location.href = targetUrl;
-                    else openPaymentInNewTab(targetUrl);
+                    else openUrlInNewTab(targetUrl);
                     resolve(true);
                 };
 
@@ -452,8 +496,8 @@
                 }
 
                 function handleError() {
-                    if (retryCount < 2) setTimeout(() => custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink, retryCount + 1).then(resolve), 300);
-                    else { alert('예약 요청 중 오류가 발생했습니다.'); resolve(false); }
+                    alert('예약 요청 중 오류가 발생했습니다.');
+                    resolve(false);
                 }
             });
         }
@@ -464,15 +508,6 @@
                 serverTimeOffsetMs = (new Date(serverDateHeader).getTime() + Math.floor((Date.now() - startReqTime) / 2)) - Date.now();
             }
         }
-
-        const fetchMonthStateList = (ym) => fetchWithServerTime(`/rest/dailyuse/mon_state_list?company_code=GYS10&part_code=03&resve_mon=${ym}&_=` + Date.now());
-        const fetchTimeSlots = (targetDate) => fetchWithServerTime(`/rest/dailyuse/time_state_list?company_code=GYS10&part_code=03&resve_mon=${getValidTargetDate(targetDate)}&_=` + Date.now());
-        const fetchItemList = async (targetDate) => {
-            if (!win.ISLOGIN) return null;
-            const data = await fetchWithServerTime(`/rest/dailyuse/item_list?company_code=GYS10&resve_part_code=03&resve_date=${getValidTargetDate(targetDate)}&member_code=&_=` + Date.now());
-            return Array.isArray(data) && data.length > 0 ? data : null;
-        };
-        const fetchUserReservations = () => win.ISLOGIN ? fetchWithServerTime(`/rest/dailyuse/use_list?company_code=&member_code=${win.MEM_NO || ''}&status_code=1&_=` + Date.now()) : Promise.resolve(null);
 
         function scrollToPanelTop() {
             const panel = document.getElementById('gys-custom-panel');
@@ -524,8 +559,9 @@
             const todayHyphen = getTodayYMDHyphen();
             const todayMMDD = formatMMDD(todayHyphen);
 
-            const userNameBtnLabel = (cachedMemberInfo.name && win.ISLOGIN)
-                ? `👤 <span style="color: #274081; line-height: 1.0;">${cachedMemberInfo.name}</span>`
+            const currentMemName = loadLocalData('gys_local_mem_nm');
+            const userNameBtnLabel = (currentMemName && win.ISLOGIN)
+                ? `👤 <span style="color: #274081; line-height: 1.0;">${currentMemName}</span>`
                 : `🔑 로그인`;
 
             const panel = document.createElement('div');
@@ -619,50 +655,6 @@
 
             if (isTargetDay) {
                 initRealtimeClock();
-            }
-
-            // [수정 완료] renderReservationStatusMap 함수를 refreshUserReservationsAsync 보다 상단으로 이동시킴
-            function renderReservationStatusMap() {
-                const ymBtn = document.getElementById('gys-ym-reload-btn');
-                if (!ymBtn) return;
-                const currentCalYM = parseYMFromDot(ymBtn.textContent.trim());
-                document.querySelectorAll('.gys-dynamic-date-btn .gys-info-badge').forEach(badge => { badge.innerHTML = ''; });
-                const reservationsByDate = getSessionReservationsMap();
-
-                Object.keys(reservationsByDate).forEach(pureDate => {
-                    if (pureDate.substring(0, 6) === currentCalYM) {
-                        const resObj = reservationsByDate[pureDate];
-                        const dateBtn = document.querySelector(`.gys-dynamic-date-btn[data-resve-date="${pureDate}"]`);
-                        if (dateBtn && resObj?.time_name) {
-                            const infoBadge = dateBtn.querySelector('.gys-info-badge');
-                            if (infoBadge) {
-                                const parsedObj = parseTimeTo4Lines(resObj.time_name);
-                                const isServer = resObj.type === 'server';
-                                infoBadge.innerHTML = `
-                                    <div style="background-color: ${isServer ? '#2e7d32' : '#1565c0'}; border: 1px solid ${isServer ? '#1b5e20' : '#0d47a1'}; color: #ffffff; border-radius: 4px; padding: 4px 0; margin-top: 1px; width: 98%; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1;">
-                                        ${parsedObj.part ? `<span style="font-size: 11.5px; font-weight: 700; margin-bottom: 4px;">${parsedObj.part}</span>` : ''}
-                                        <span style="font-size: 11px; font-weight: 400;">${parsedObj.startTime}</span>
-                                        ${parsedObj.endTime ? `<span style="font-size: 8px; font-weight: bold; opacity: 0.8; margin: -2px 0;">~</span><span style="font-size: 11px; font-weight: 400;">${parsedObj.endTime}</span>` : ''}
-                                    </div>`;
-                            }
-                        }
-                    }
-                });
-            }
-
-            async function refreshUserReservationsAsync() {
-                clearSessionReservationsMap();
-                const resData = await fetchUserReservations();
-                let newReservationsMap = {};
-                if (Array.isArray(resData)) {
-                    resData.forEach(item => {
-                        if (String(item.app_type) === "30" && item.use_date && item.time_name) {
-                            newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
-                        }
-                    });
-                }
-                setSessionReservationsMap(newReservationsMap);
-                renderReservationStatusMap();
             }
 
             const timeSelectEl = document.getElementById('gys-time-select');
@@ -870,13 +862,21 @@
 
                     let pressTimer = null;
                     let isLongPress = false;
+                    let startX = 0;
+                    let startY = 0;
 
                     const startLongPressCheck = (e) => {
                         if (formattedResveDate < getTodayYMD()) return;
                         isLongPress = false;
+
+                        if (e.touches && e.touches.length > 0) {
+                            startX = e.touches[0].clientX;
+                            startY = e.touches[0].clientY;
+                        }
+
                         pressTimer = setTimeout(() => {
                             isLongPress = true;
-                            const reservationsMap = getSessionReservationsMap();
+                            const reservationsMap = getLocalReservationsMap();
                             const resObj = reservationsMap[formattedResveDate];
 
                             if (!resObj || resObj.type !== 'server' || !resObj.data) {
@@ -900,9 +900,20 @@
 
                             if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
                                 const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
-                                openRefundInNewTab(refundUrl);
+                                openUrlInNewTab(refundUrl);
                             }
                         }, 700);
+                    };
+
+                    const handleTouchMove = (e) => {
+                        if (!pressTimer) return;
+                        if (e.touches && e.touches.length > 0) {
+                            const currentX = e.touches[0].clientX;
+                            const currentY = e.touches[0].clientY;
+                            if (Math.abs(currentX - startX) > 10 || Math.abs(currentY - startY) > 10) {
+                                cancelLongPressCheck();
+                            }
+                        }
                     };
 
                     const cancelLongPressCheck = () => {
@@ -917,6 +928,7 @@
                     dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
 
                     dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: true });
+                    dateBtn.addEventListener('touchmove', handleTouchMove, { passive: true });
                     dateBtn.addEventListener('touchend', cancelLongPressCheck);
                     dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
 
@@ -948,11 +960,12 @@
                         if (!selectedTimeSeq || !selectedProgramCode) { alert('로그인이 필요한 서비스입니다.'); return; }
 
                         dateBtn.disabled = true;
-                        if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
-                            let reservationsMap = getSessionReservationsMap();
-                            reservationsMap[formattedResveDate] = { type: 'manual', time_name: selectedTimeText };
-                            setSessionReservationsMap(reservationsMap);
-                            renderReservationStatusMap();
+						if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
+							
+							tempReservationsMap = {
+								'resve_date': formattedResveDate,
+								'time_name': selectedTimeText,
+							};
                         } else {
                             dateBtn.style.backgroundColor = '#f8d7da';
                         }
@@ -984,9 +997,10 @@
             ymBtn.addEventListener('click', loadDateList);
 
             document.getElementById('gys-user-name-btn').addEventListener('click', () => {
-                if (cachedMemberInfo.name && win.ISLOGIN) {
-                    if (confirm(`[${cachedMemberInfo.name}] 님 로그아웃 하시겠습니까?`)) {
-                        clearSessionReservationsMap();
+                const currentMemName = loadLocalData('gys_local_mem_nm');
+                if (currentMemName && win.ISLOGIN) {
+                    if (confirm(`[${currentMemName}] 님 로그아웃 하시겠습니까?`)) {
+                        removeAllLocal();
                         window.location.href = "/fmcs/31?action=logout_force&login_check=skip&referer=/fmcs/27?referer=/fmcs/102";
                     }
                 } else {
@@ -1003,10 +1017,6 @@
             document.getElementById('gys-next-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), 1)); loadDateList(); });
 
             await loadDateList();
-
-            if (win.ISLOGIN) {
-                refreshUserReservationsAsync().catch(e => {});
-            }
         }
 
         window.addEventListener('load', async () => {

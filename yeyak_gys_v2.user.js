@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.6.3
+// @version      0.6.5
 // @description  refreshUserReservationsAsync 스코프 오류 수정 버전
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -55,6 +55,30 @@
 
     function setLocalReservationsMap(mapObj) {
         saveLocalData('gys_local_reservations_map', JSON.stringify(mapObj));
+    }
+	
+    function getCachedMemberName(memNo) {
+        if (!memNo) return null;
+        try {
+            const jsonStr = loadLocalData('gys_local_member_names_map');
+            if (!jsonStr) return null;
+            const parsed = JSON.parse(jsonStr);
+            return (typeof parsed === 'object' && parsed !== null) ? parsed[memNo] : null;
+        } catch (e) { return null; }
+    }
+
+    function setCachedMemberName(memNo, name) {
+        if (!memNo || !name) return;
+        try {
+            const jsonStr = loadLocalData('gys_local_member_names_map');
+            let mapObj = {};
+            if (jsonStr) {
+                const parsed = JSON.parse(jsonStr);
+                if (typeof parsed === 'object' && parsed !== null) mapObj = parsed;
+            }
+            mapObj[memNo] = name;
+            saveLocalData('gys_local_member_names_map', JSON.stringify(mapObj));
+        } catch (e) {}
     }
 
     function removeAllLocal() {
@@ -313,31 +337,34 @@
             }
         }
 
-        async function checkTabSessionStatus(isFirstLoad = false) {
+		async function checkTabSessionStatus(isFirstLoad = false) {
             try {
-                const cachedMemNo = loadLocalData('gys_local_mem_no');
-                const cachedMemNm = loadLocalData('gys_local_mem_nm');
-
-                if (win.MEM_NO && cachedMemNo === win.MEM_NO && cachedMemNm) {
-                    win.ISLOGIN = true;
-                    updateUserNameBtnLabel();
-                    return true;
-                }
-
                 let memNo = String(win.MEM_NO || '').trim();
-                if (!isFirstLoad) {
+
+                // 1. 첫 로드가 아니고 win.MEM_NO가 없으면 서버에서 회원번호 먼저 획득
+                if (!isFirstLoad && !memNo) {
                     const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
                     memNo = responseText ? responseText.trim() : '';
+                }
+
+                if (!memNo) {
+                    resetLoginState();
+                    return false;
                 }
 
                 win.ISLOGIN = true;
                 win.MEM_NO = memNo;
 
-                if (cachedMemNo === memNo && cachedMemNm) {
+                // 2. 현재 세션의 회원번호에 대한 이름이 로컬 캐시에 이미 있는지 확인
+                const cachedName = getCachedMemberName(memNo);
+                if (cachedName) {
+                    saveLocalData('gys_local_mem_no', memNo);
+                    saveLocalData('gys_local_mem_nm', cachedName);
                     updateUserNameBtnLabel();
                     return true;
                 }
 
+                // 3. 캐시에 없을 때만 /fmcs/221 호출 (최소화)
                 const htmlText = await fetchWithServerTime('/fmcs/221?_=' + Date.now(), 'text');
                 if (htmlText) {
                     const nameMatch = htmlText.match(/<dt>([^<]+)<\/dt>/);
@@ -346,6 +373,10 @@
                     if (extractedName) {
                         saveLocalData('gys_local_mem_no', memNo);
                         saveLocalData('gys_local_mem_nm', extractedName);
+                        
+                        // 💡 회원번호 맵 캐시에 영구 저장 (user['12345678'] = '홍길동' 형태)
+                        setCachedMemberName(memNo, extractedName);
+
                         updateUserNameBtnLabel();
                         return true;
                     }

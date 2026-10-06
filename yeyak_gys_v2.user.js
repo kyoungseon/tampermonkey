@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.6.2
+// @version      0.6.3
 // @description  refreshUserReservationsAsync 스코프 오류 수정 버전
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -424,12 +424,18 @@
                 if (isLoggedIn && changeFlag === 'true') {
                     removeLocalData('gys_local_change_resve');
 					
-					if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.resve_date) {
+					if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.type) {
 						let reservationsMap = getLocalReservationsMap();
-						reservationsMap[tempReservationsMap.resve_date] = { 
-							type: 'manual', 
-							time_name: tempReservationsMap.time_name || '' 
-						};
+						
+						if(tempReservationsMap.type === 'assign') {
+							reservationsMap[tempReservationsMap.resve_date] = { 
+								type: 'manual', 
+								time_name: tempReservationsMap.time_name
+							};
+						} else {
+							delete reservationsMap[tempReservationsMap.resve_date];
+						}
+						
 						setLocalReservationsMap(reservationsMap);
 						renderReservationStatusMap();
 					}
@@ -902,6 +908,12 @@
                             if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
                                 const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
                                 openUrlInNewTab(refundUrl);
+								
+								tempReservationsMap = {
+									'type': 'delete',
+									'resve_date': useDate.replace(/-/g, ''),
+									'time_name': timeName
+								};
                             }
                         }, 700);
                     };
@@ -964,8 +976,9 @@
 						if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
 							
 							tempReservationsMap = {
+								'type': 'assign',
 								'resve_date': formattedResveDate,
-								'time_name': selectedTimeText,
+								'time_name': selectedTimeText
 							};
                         } else {
                             dateBtn.style.backgroundColor = '#f8d7da';

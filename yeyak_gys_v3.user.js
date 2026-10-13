@@ -671,15 +671,15 @@
             });
 
             popupOverlay.innerHTML = `
-                <div style="background-color: #f8f9fa; width: 270px; height: 360px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
+                <div style="background-color: #f8f9fa; width: 290px; height: 360px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
                         <span style="font-size: 13px; font-weight: bold;">설정</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                     </div>
                     <div style="background-color: #ffffff; padding: 20px 14px; flex: 1; overflow-y: auto;">
-                        <div style="display: flex; flex-direction: column; gap: 8px;">
-                            <label style="font-size: 12px; font-weight: bold; color: #333333;">예약일 설정</label>
-                            <select id="gys-setting-resve-day-select" style="width: 100%; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
+                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px;">
+                            <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약일 설정</label>
+                            <select id="gys-setting-resve-day-select" style="width: 140px; height: 34px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
                                 ${dayOptionsHtml}
                             </select>
                         </div>

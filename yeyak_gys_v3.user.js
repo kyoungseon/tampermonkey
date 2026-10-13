@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace    http://tampermonkey.net/
-// @version      0.1.16
+// @version      0.1.17
 // @description  예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (부제목 강조, 물결표 여백 최소화)
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -911,7 +911,7 @@
                         isClosedDay = false;
                     } else if (stateCd === '10' && stateNm.includes('예약마감')) {
                         statusText = stateNm;
-                        statusColor = '#e5e7eb';
+                        statusColor = '#6c757d';
                         isDisabled = false;
                     } else if (stateCd === '10' && stateNm.includes('예약가능')) {
                         statusText = stateNm;
@@ -919,7 +919,7 @@
                         isDisabled = false;
                     } else if (stateCd === '40') {
                         statusText = stateNm;
-                        statusColor = '#fecdd3';
+                        statusColor = '#d9534f';
                         isDisabled = false;
                     }
 
@@ -934,7 +934,7 @@
                             '<div class="gys-info-badge" style="position: absolute; left: 0; top: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; pointer-events: none;"></div>' +
                             (statusText ?
                                 '<span class="gys-status-text" style="' +
-                                    'width: 100%; font-size: 9.5px; color: ' + statusColor + '; font-weight: bold; line-height: 1.15; ' +
+                                    'width: 100%; font-size: 9.5px; color: ' + statusColor + '; font-weight: normal; line-height: 1.15; ' +
                                     'text-align: center; word-break: keep-all; overflow-wrap: anywhere; white-space: normal; ' +
                                     'overflow: hidden; pointer-events: none;' +
                                 '">' + statusText + '</span>'

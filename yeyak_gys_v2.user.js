@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V2
 // @namespace    http://tampermonkey.net/
-// @version      0.6.6
+// @version      2.6.6
 // @description  시간대 콤보박스 롱프레스 시 option value | text 목록 확인 기능 추가
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102

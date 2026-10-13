@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace    http://tampermonkey.net/
-// @version      0.1.19
+// @version      3.1.19
 // @description  예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (부제목 강조, 물결표 여백 최소화)
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102

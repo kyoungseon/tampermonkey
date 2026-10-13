@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace    http://tampermonkey.net/
-// @version      0.1.18
+// @version      0.1.19
 // @description  예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (부제목 강조, 물결표 여백 최소화)
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -784,7 +784,6 @@
                 }
 
                 await refreshUserReservationsAsync();
-                alert('예약현황이 새로고침되었습니다.');
             });
 
             async function updateProgramSelectOptions(targetDate, isManualClick = false) {
@@ -887,41 +886,40 @@
                     const dayOfWeek = new Date(rawDate).getDay();
 
                     let textColor = '#333333';
-                    if (dayOfWeek === 0) textColor = '#d9534f';
-                    if (dayOfWeek === 6) textColor = '#0275d8';
+                    if (dayOfWeek === 0) textColor = '#ed2222';
+                    if (dayOfWeek === 6) textColor = '#125aab';
 
                     const hasClose = item.close_advice && item.close_advice.trim() !== '';
                     const stateCd = String(item.state_cd || '');
                     const stateNm = (item.state_nm || '').replace(/<br>/g, ' ');
 
                     let statusText = '';
-                    let statusColor = '#333333';
-					let statusFontWeight = '500';
+                    let statusColor = '#656565';
+					let statusFontWeight = 'normal';
                     let isDisabled = false;
                     let isClosedDay = false;
 
                     if (hasClose || stateCd === '30') {
                         statusText = hasClose ? item.close_advice.trim() : (stateNm || '휴관일');
-                        statusColor = '#d9534f';
+                        statusColor = '#ed2222';
                         isDisabled = true;
                         isClosedDay = true;
                     } else if (stateCd === '20') {
                         statusText = stateNm;
-                        statusColor = '#6c757d';
+                        statusColor = '#656565';
                         isDisabled = true;
                         isClosedDay = false;
                     } else if (stateCd === '10' && stateNm.includes('예약마감')) {
                         statusText = stateNm;
-                        statusColor = '#6c757d';
+                        statusColor = '#656565';
                         isDisabled = false;
                     } else if (stateCd === '10' && stateNm.includes('예약가능')) {
                         statusText = stateNm;
-                        statusColor = '#0056b3';
-						statusFontWeight = '700'
+                        statusColor = '#0072bc';
                         isDisabled = false;
                     } else if (stateCd === '40') {
                         statusText = stateNm;
-                        statusColor = '#d9534f';
+                        statusColor = '#ed2222';
                         isDisabled = false;
                     }
 

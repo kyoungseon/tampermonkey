@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.2.1
-// @description 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (paymentResult 즉시 탭 닫기 적용)
+// @version     3.2.2
+// @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
 // @match       https://yeyak.gys.or.kr/fmcs/102?*
@@ -504,16 +504,19 @@
                 }
 
                 const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO || ''}&user_cnt=1&_=` + Date.now();
-
-                const handleResponseData = (data) => {
+				const handleResponseData = (data) => {
                     if (data.result_code != 0) {
                         alert(data.result_message || '예약에 실패했습니다.');
                         resolve(false);
                         return;
                     }
-                    const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}&from_panel=true`;
-                    if (isAutoLink) window.location.href = targetUrl;
-                    else openUrlInNewTab(targetUrl);
+                    // 💡 openUrl인 경우 from_panel을 붙이지 않고, autoLink일 때만 붙이도록 분기 처리
+                    const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
+                    if (isAutoLink) {
+                        window.location.href = targetUrl + '&from_panel=true';
+                    } else {
+                        openUrlInNewTab(targetUrl);
+                    }
                     resolve(true);
                 };
 

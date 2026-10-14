@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.1.21
+// @version     3.1.22
 // @description 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (paymentResult 즉시 탭 닫기 적용)
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -1111,7 +1111,29 @@
             await loadDateList();
         }
 
-        window.addEventListener('load', async () => {
+		window.addEventListener('load', async () => {
+            console.log('[DEBUG] window.load fired. Current MEM_NO:', MEM_NO, 'Type:', typeof MEM_NO);
+
+            // 💡 첫 로딩 시 사이트의 memNoSearch() 비동기 응답 대기 및 루프별 로그 추가
+            if (typeof MEM_NO === 'undefined') {
+                await new Promise(resolve => {
+                    let retries = 0;
+                    const interval = setInterval(() => {
+                        retries++;
+                        console.log(`[DEBUG] Polling MEM_NO... try #${retries}, Current MEM_NO:`, MEM_NO);
+
+                        // MEM_NO가 정의되었거나(null이든 값이 있든) 최대 1.5초(15번)가 지나면 탈출
+                        if (typeof MEM_NO !== 'undefined' || retries > 15) {
+                            console.log('[DEBUG] Polling finished. Final MEM_NO in loop:', MEM_NO);
+                            clearInterval(interval);
+                            resolve();
+                        }
+                    }, 100);
+                });
+            } else {
+                console.log('[DEBUG] MEM_NO was already defined upon load:', MEM_NO);
+            }
+
             const timeSeq = urlParams.get('time_seq');
             const programCd = urlParams.get('program_cd') || "I000221";
             const resveDateParam = urlParams.get('resve_date');

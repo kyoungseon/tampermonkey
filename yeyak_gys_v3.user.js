@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.1.23
+// @version     3.1.24
 // @description 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (paymentResult 즉시 탭 닫기 적용)
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -219,17 +219,8 @@
     }
 
     if (actionParam) {
-        const isQuickAutoTab = isFromPanelParam || loadLocalData('gys_local_quick_auto') === 'true';
-        if (actionParam === 'paymentResult' && isQuickAutoTab) {
-            saveLocalData('gys_local_change_resve', 'true');
-
-            removeLocalData('gys_local_quick_auto');
-            win.close();
-            return;
-        }
 		if (actionParam === 'reg_read') {
             saveLocalData('gys_local_change_resve', 'true');
-            removeLocalData('gys_local_quick_auto');
 
             const isRefundPath = currentPath.includes('/fmcs/122');
             const alertMsg = isRefundPath
@@ -246,8 +237,7 @@
             return;
         }
         if (actionParam === 'write') {
-            if (isFromPanelParam) saveLocalData('gys_local_quick_auto', 'true');
-            if (isQuickAutoTab) {
+            if (isFromPanelParam) {
                 const handlePaymentAutoClick = () => setTimeout(() => {
                     const refundCheckbox = document.querySelector('input[name="agree_refund"]');
                     if (refundCheckbox && !refundCheckbox.checked) {
@@ -264,8 +254,7 @@
             return;
         }
         if (actionParam === 'refund') {
-            if (isFromPanelParam) saveLocalData('gys_local_quick_auto', 'true');
-            if (isQuickAutoTab) {
+            if (isFromPanelParam) {
                 const handleRefundAutoClick = () => setTimeout(() => {
                     const refundBtn = document.getElementById('refundBtn');
                     if (refundBtn) {

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.1.24
+// @version     3.2.1
 // @description 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (paymentResult 즉시 탭 닫기 적용)
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -219,25 +219,29 @@
     }
 
     if (actionParam) {
-		if (actionParam === 'reg_read') {
-            saveLocalData('gys_local_change_resve', 'true');
+        const isQuickCloseTab = isFromPanelParam || loadLocalData('gys_quick_close_tab') === 'true';
+        if (actionParam === 'reg_read') {
+            if (isQuickCloseTab) {
+				saveLocalData('gys_local_change_resve', 'true');
+				removeLocalData('gys_quick_close_tab');
 
-            const isRefundPath = currentPath.includes('/fmcs/122');
-            const alertMsg = isRefundPath
-                ? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
-                : "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
+				const isRefundPath = currentPath.includes('/fmcs/122');
+				const alertMsg = isRefundPath
+					? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
+					: "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
 
-            const handleRegReadConfirm = () => setTimeout(() => {
-                if (confirm(alertMsg)) win.close();
-            }, 350);
+				const handleRegReadConfirm = () => setTimeout(() => {
+					if (confirm(alertMsg)) win.close();
+				}, 350);
 
-            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
-            else handleRegReadConfirm();
-            
+				if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
+				else handleRegReadConfirm();
+			}
             return;
         }
         if (actionParam === 'write') {
             if (isFromPanelParam) {
+				saveLocalData('gys_quick_close_tab', 'true');
                 const handlePaymentAutoClick = () => setTimeout(() => {
                     const refundCheckbox = document.querySelector('input[name="agree_refund"]');
                     if (refundCheckbox && !refundCheckbox.checked) {
@@ -255,6 +259,7 @@
         }
         if (actionParam === 'refund') {
             if (isFromPanelParam) {
+				saveLocalData('gys_quick_close_tab', 'true');
                 const handleRefundAutoClick = () => setTimeout(() => {
                     const refundBtn = document.getElementById('refundBtn');
                     if (refundBtn) {

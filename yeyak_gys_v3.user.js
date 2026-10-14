@@ -1,17 +1,17 @@
 // ==UserScript==
-// @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
-// @namespace    http://tampermonkey.net/
-// @version      3.1.19
-// @description  예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (부제목 강조, 물결표 여백 최소화)
-// @author       SS2225
-// @match        https://yeyak.gys.or.kr/fmcs/102
-// @match        https://yeyak.gys.or.kr/fmcs/102?*
-// @match        https://yeyak.gys.or.kr/fmcs/122?*
-// @match        https://yeyak.gys.or.kr/fmcs/27*
-// @grant        window.close
-// @grant        unsafeWindow
-// @grant        GM_xmlhttpRequest
-// @run-at       document-start
+// @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
+// @namespace   http://tampermonkey.net/
+// @version     3.1.21
+// @description 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 (paymentResult 즉시 탭 닫기 적용)
+// @author      SS2225
+// @match       https://yeyak.gys.or.kr/fmcs/102
+// @match       https://yeyak.gys.or.kr/fmcs/102?*
+// @match       https://yeyak.gys.or.kr/fmcs/122?*
+// @match       https://yeyak.gys.or.kr/fmcs/27*
+// @grant       window.close
+// @grant       unsafeWindow
+// @grant       GM_xmlhttpRequest
+// @run-at      document-start
 // ==/UserScript==
 (function() {
     'use strict';
@@ -223,11 +223,9 @@
         if (actionParam === 'paymentResult' && isQuickAutoTab) {
             saveLocalData('gys_local_change_resve', 'true');
             try { if (win.opener) win.opener = null; } catch (e) {}
-            win.alert = (msg) => {
-                removeLocalData('gys_local_quick_auto');
-                if (confirm("🎉 예약 및 결제가 정상 완료되었습니다!\n\n현재 탭을 닫으시겠습니까?")) win.close();
-                else win.stop && win.stop();
-            };
+
+            removeLocalData('gys_local_quick_auto');
+            win.close();
             return;
         }
         if (actionParam === 'reg_read') {
@@ -335,11 +333,11 @@
 
         async function checkTabSessionStatus(isFirstLoad = false) {
             try {
-                let memNo = String(win.MEM_NO || '').trim();
+                let memNo = (win.MEM_NO !== undefined && win.MEM_NO !== null && String(win.MEM_NO).trim() !== '') ? String(win.MEM_NO).trim() : null;
 
                 if (!isFirstLoad && !memNo) {
                     const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
-                    memNo = responseText ? responseText.trim() : '';
+                    memNo = (responseText && responseText.trim() !== '') ? responseText.trim() : null;
                 }
 
                 if (!memNo) {
@@ -379,7 +377,7 @@
 
         function resetLoginState() {
             win.ISLOGIN = false;
-            win.MEM_NO = '';
+            win.MEM_NO = null;
             removeAllLocal();
             updateUserNameBtnLabel();
             renderReservationStatusMap();
@@ -399,7 +397,6 @@
             if (!ymBtn) return;
             const currentCalYM = parseYMFromDot(ymBtn.textContent.trim());
 
-            // 💡 배지 초기화 및 상태 텍스트 다시 복원
             document.querySelectorAll('.gys-dynamic-date-btn').forEach(btn => {
                 const infoBadge = btn.querySelector('.gys-info-badge');
                 if (infoBadge) {
@@ -414,7 +411,6 @@
 
             const reservationsByDate = getLocalReservationsMap();
 
-            // 💡 예약 배지 내부 텍스트 크기 및 상하 여백 최적화 반영
             Object.keys(reservationsByDate).forEach(pureDate => {
                 if (pureDate.substring(0, 6) === currentCalYM) {
                     const resObj = reservationsByDate[pureDate];
@@ -895,7 +891,7 @@
 
                     let statusText = '';
                     let statusColor = '#656565';
-					let statusFontWeight = 'normal';
+                    let statusFontWeight = 'normal';
                     let isDisabled = false;
                     let isClosedDay = false;
 

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.2.2
+// @version     3.2.3
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -222,26 +222,26 @@
         const isQuickCloseTab = isFromPanelParam || loadLocalData('gys_quick_close_tab') === 'true';
         if (actionParam === 'reg_read') {
             if (isQuickCloseTab) {
-				saveLocalData('gys_local_change_resve', 'true');
-				removeLocalData('gys_quick_close_tab');
+                saveLocalData('gys_local_change_resve', 'true');
+                removeLocalData('gys_quick_close_tab');
 
-				const isRefundPath = currentPath.includes('/fmcs/122');
-				const alertMsg = isRefundPath
-					? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
-					: "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
+                const isRefundPath = currentPath.includes('/fmcs/122');
+                const alertMsg = isRefundPath
+                    ? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
+                    : "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
 
-				const handleRegReadConfirm = () => setTimeout(() => {
-					if (confirm(alertMsg)) win.close();
-				}, 350);
+                const handleRegReadConfirm = () => setTimeout(() => {
+                    if (confirm(alertMsg)) win.close();
+                }, 350);
 
-				if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
-				else handleRegReadConfirm();
-			}
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
+                else handleRegReadConfirm();
+            }
             return;
         }
         if (actionParam === 'write') {
             if (isFromPanelParam) {
-				saveLocalData('gys_quick_close_tab', 'true');
+                saveLocalData('gys_quick_close_tab', 'true');
                 const handlePaymentAutoClick = () => setTimeout(() => {
                     const refundCheckbox = document.querySelector('input[name="agree_refund"]');
                     if (refundCheckbox && !refundCheckbox.checked) {
@@ -259,7 +259,7 @@
         }
         if (actionParam === 'refund') {
             if (isFromPanelParam) {
-				saveLocalData('gys_quick_close_tab', 'true');
+                saveLocalData('gys_quick_close_tab', 'true');
                 const handleRefundAutoClick = () => setTimeout(() => {
                     const refundBtn = document.getElementById('refundBtn');
                     if (refundBtn) {
@@ -504,13 +504,12 @@
                 }
 
                 const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO || ''}&user_cnt=1&_=` + Date.now();
-				const handleResponseData = (data) => {
+                const handleResponseData = (data) => {
                     if (data.result_code != 0) {
                         alert(data.result_message || '예약에 실패했습니다.');
                         resolve(false);
                         return;
                     }
-                    // 💡 openUrl인 경우 from_panel을 붙이지 않고, autoLink일 때만 붙이도록 분기 처리
                     const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
                     if (isAutoLink) {
                         window.location.href = targetUrl + '&from_panel=true';
@@ -571,7 +570,8 @@
             const style = document.createElement('style');
             style.id = 'gys-responsive-style';
             style.textContent = `
-                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; -webkit-user-select: none; user-select: none; }
+                .gys-dynamic-date-btn, #gys-custom-panel button, #gys-custom-panel select { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
                 div[class*="chatbot"], div[id*="chatbot"], div[class*="happyment"], div[id*="happyment"], iframe[src*="chatbot"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
                 @media (min-width: 769px) {
                     #gys-pc-layout-wrapper { display: flex !important; justify-content: center !important; align-items: flex-start !important; gap: 20px !important; margin: 0 auto !important; width: fit-content !important; max-width: 100% !important; }
@@ -1106,10 +1106,9 @@
             await loadDateList();
         }
 
-		window.addEventListener('load', async () => {
+        window.addEventListener('load', async () => {
             console.log('[DEBUG] window.load fired. Current MEM_NO:', MEM_NO, 'Type:', typeof MEM_NO);
 
-            // 💡 첫 로딩 시 사이트의 memNoSearch() 비동기 응답 대기 및 루프별 로그 추가
             if (typeof MEM_NO === 'undefined') {
                 await new Promise(resolve => {
                     let retries = 0;
@@ -1117,7 +1116,6 @@
                         retries++;
                         console.log(`[DEBUG] Polling MEM_NO... try #${retries}, Current MEM_NO:`, MEM_NO);
 
-                        // MEM_NO가 정의되었거나(null이든 값이 있든) 최대 1.5초(15번)가 지나면 탈출
                         if (typeof MEM_NO !== 'undefined' || retries > 15) {
                             console.log('[DEBUG] Polling finished. Final MEM_NO in loop:', MEM_NO);
                             clearInterval(interval);

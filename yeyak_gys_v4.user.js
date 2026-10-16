@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     4.1.1
+// @version     4.1.3
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -39,9 +39,9 @@
     const saveLocalData = (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} };
     const removeLocalData = (key) => { try { win.localStorage.removeItem(key); } catch (e) {} };
 
-	const loadSessionData = (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } };
-	const saveSessionData = (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} };
-	const removeSessionData = (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} };
+    const loadSessionData = (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } };
+    const saveSessionData = (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} };
+    const removeSessionData = (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} };
 
     function getLocalReservationsMap() {
         const jsonStr = loadLocalData('gys_local_reservations_map');
@@ -242,50 +242,50 @@
             }
             return;
         }
-		if (actionParam === 'write') {
-			if (isFromPanelParam) {
-				try { win.opener = null; } catch (e) {}
-				saveSessionData('gys_session_quick_close_tab', 'true');
-				const handlePaymentAutoClick = () => {
-					let tries = 0;
-					const timer = setInterval(() => {
-						const cb = document.querySelector('input[name="agree_refund"]');
-						const payBtn = document.getElementById('apply_payment');
-						if (cb && payBtn) {
-							clearInterval(timer);
-							if (!cb.checked) {
-								cb.checked = true;
-								cb.dispatchEvent(new Event('change', { bubbles: true }));
-								cb.dispatchEvent(new Event('click', { bubbles: true }));
-							}
-							payBtn.click();
-						} else if (++tries > 25) {
-							clearInterval(timer);
-						}
-					}, 200);
-				};
-				if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handlePaymentAutoClick);
-				else handlePaymentAutoClick();
-			}
-			return;
-		}
+        if (actionParam === 'write') {
+            if (isFromPanelParam) {
+                try { win.opener = null; } catch (e) {}
+                saveSessionData('gys_session_quick_close_tab', 'true');
+                const handlePaymentAutoClick = () => {
+                    let tries = 0;
+                    const timer = setInterval(() => {
+                        const cb = document.querySelector('input[name="agree_refund"]');
+                        const payBtn = document.getElementById('apply_payment');
+                        if (cb && payBtn) {
+                            clearInterval(timer);
+                            if (!cb.checked) {
+                                cb.checked = true;
+                                cb.dispatchEvent(new Event('change', { bubbles: true }));
+                                cb.dispatchEvent(new Event('click', { bubbles: true }));
+                            }
+                            payBtn.click();
+                        } else if (++tries > 25) {
+                            clearInterval(timer);
+                        }
+                    }, 200);
+                };
+                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handlePaymentAutoClick);
+                else handlePaymentAutoClick();
+            }
+            return;
+        }
         if (actionParam === 'refund') {
             if (isFromPanelParam) {
-				try { win.opener = null; } catch (e) {}
-				saveSessionData('gys_session_quick_close_tab', 'true');
+                try { win.opener = null; } catch (e) {}
+                saveSessionData('gys_session_quick_close_tab', 'true');
 
-				const handleRefundAutoClick = () => {
-					let tries = 0;
-					const timer = setInterval(() => {
-						const refundBtn = document.getElementById('refundBtn');
-						if (refundBtn) {
-							clearInterval(timer);
-							refundBtn.click();   // 한 번만 클릭
-						} else if (++tries > 25) {   // 약 5초 후 포기
-							clearInterval(timer);
-						}
-					}, 200);
-				};
+                const handleRefundAutoClick = () => {
+                    let tries = 0;
+                    const timer = setInterval(() => {
+                        const refundBtn = document.getElementById('refundBtn');
+                        if (refundBtn) {
+                            clearInterval(timer);
+                            refundBtn.click();   // 한 번만 클릭
+                        } else if (++tries > 25) {   // 약 5초 후 포기
+                            clearInterval(timer);
+                        }
+                    }, 200);
+                };
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRefundAutoClick);
                 else handleRefundAutoClick();
             }
@@ -380,11 +380,11 @@
                         return true;
                     }
                 }
-				saveLocalData('gys_local_mem_no', memNo);
-				saveLocalData('gys_local_mem_nm', '미발급');
-				updateUserNameBtnLabel();
+                saveLocalData('gys_local_mem_no', memNo);
+                saveLocalData('gys_local_mem_nm', '미발급');
+                updateUserNameBtnLabel();
 
-				return true;
+                return true;
             } catch (err) {}
 
             resetLoginState();
@@ -479,10 +479,10 @@
                     if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.type) {
                         let reservationsMap = getLocalReservationsMap();
 
-                        if(tempReservationsMap.type === 'assign') {
+                        if (tempReservationsMap.type === 'assign') {
                             reservationsMap[tempReservationsMap.resve_date] = {
                                 type: 'manual',
-								data: {time_name: tempReservationsMap.time_name}
+                                data: { time_name: tempReservationsMap.time_name }
                             };
                         } else {
                             delete reservationsMap[tempReservationsMap.resve_date];
@@ -508,7 +508,7 @@
         function openUrlInNewTab(url) {
             const form = document.createElement('form');
             form.method = 'GET'; form.action = url.split('?')[0]; form.target = '_blank';
-			form.rel = 'noopener';
+            form.rel = 'noopener';
             url.split('?')[1]?.split('&').forEach(param => {
                 const [k, v] = param.split('=');
                 const input = document.createElement('input'); input.type = 'hidden'; input.name = k; input.value = decodeURIComponent(v);
@@ -518,67 +518,42 @@
             form.appendChild(panelParamInput);
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
-		
-		function openBlankWindow() {
-			
-			const w = window.open('', '_blank');               // 클릭 핸들러 안에서 await 전에 동기 호출
-			if (w) { try { w.opener = null; } catch (e) {} }   // 달력 탭과 연결 끊기
-			return w;
-		}
 
-		function navigatePopup(popup, url) {
-			const u = new URL(url, location.origin);
-			u.searchParams.set('from_panel', 'true');
-			if (popup && !popup.closed) { popup.location.href = u.toString(); return true; }
-			return false;
-		}
+        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
+            return new Promise(async (resolve) => {
+                if (!win.ISLOGIN) {
+                    alert('로그인이 필요한 서비스입니다.');
+                    isAutoLink ? handleLoginRedirect(true) : handleLoginRedirect();
+                    resolve(false);
+                    return;
+                }
 
-		async function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false, popup = null) {
-			const fail = () => { if (popup && !popup.closed) popup.close(); return false; };
+                const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO}&user_cnt=1&_=` + Date.now();
 
-			if (!win.ISLOGIN) {
-				alert('로그인이 필요한 서비스입니다.');
-				if (popup && !popup.closed) popup.close();
-				handleLoginRedirect(isAutoLink);
-				return false;
-			}
+                const handleResponseData = (data) => {
+                    if (!data || data.result_code != 0) {
+                        alert(data?.result_message || '예약에 실패했습니다.');
+                        resolve(false);
+                        return;
+                    }
+                    const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
+                    if (isAutoLink) {
+                        window.location.href = targetUrl + '&from_panel=true';
+                    } else {
+                        openUrlInNewTab(targetUrl);
+                    }
+                    resolve(true);
+                };
 
-			const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO}&user_cnt=1&_=` + Date.now();
-			const data = await fetchWithServerTime(targetApiUrl, 'json');
-
-			if (!data) { alert('예약 요청 중 오류가 발생했습니다.'); return fail(); }
-			if (data.result_code != 0) { alert(data.result_message || '예약에 실패했습니다.'); return fail(); }
-
-			const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
-			if (isAutoLink) {
-				window.location.href = targetUrl + '&from_panel=true';
-				return true;
-			}
-			if (!navigatePopup(popup, targetUrl)) {
-				alert('결제 창이 닫혀 있습니다. 예약은 잡혔으니 내 예약 목록에서 결제를 진행해 주세요.');
-				return false;
-			}
-			return true;
-		}
-		
-		function requestRefund(d) {
-			const slipNo = d.slip_no || '', resveNo = d.entr_res_idx || '';
-			if (!resveNo || !slipNo) { alert('환불에 필요한 상세 예약 번호가 누락되었습니다.'); return; }
-			const useDate = d.use_date || '', timeName = d.time_name || '';
-			if (!confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) return;
-
-			const u = new URL('/fmcs/122', location.origin);
-			u.search = new URLSearchParams({
-				slip_no: slipNo, comcd: d.comcd || 'GYS10', resve_no: resveNo,
-				request_no: d.req_no !== undefined ? d.req_no : 0, action: 'refund',
-				time_idx: d.res_time_idx || 1, from_panel: 'true'
-			}).toString();
-
-			const w = window.open(u.toString(), '_blank');
-			if (!w) { alert('팝업이 차단되어 환불 창을 열 수 없습니다.'); return; }
-			try { w.opener = null; } catch (e) {}
-			tempReservationsMap = { 'type': 'delete', 'resve_date': useDate.replace(/-/g, ''), 'time_name': timeName };
-		}
+                const data = await fetchWithServerTime(targetApiUrl, 'json');
+                if (data) {
+                    handleResponseData(data);
+                } else {
+                    alert('예약 요청 중 오류가 발생했습니다.');
+                    resolve(false);
+                }
+            });
+        }
 
         function updateServerTimeOffset(response, startReqTime) {
             let serverDateHeader = response.headers?.get ? response.headers.get('date') : response.responseHeaders?.match(/^date:\s*(.+)$/im)?.[1];
@@ -808,17 +783,17 @@
             });
 
             document.getElementById('gys-refresh-res-btn').addEventListener('click', async () => {
-				if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
+                if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
-					return;
+                    return;
                 }
 
                 await refreshUserReservationsAsync();
-				alert('예약현황이 조회되었습니다.');
+                alert('예약현황이 조회되었습니다.');
             });
 
             async function updateProgramSelectOptions(targetDate, isManualClick = false) {
-                if (!win.ISLOGIN && isManualClick) { alert('로그인이 필요한 서비스입니다.'); handleLoginRedirect(); return; }
+                if (!win.ISLOGIN && isManualClick) { alert('로그인이 필요한 서비스입니다.'); return; }
                 const selectEl = document.getElementById('gys-program-select');
                 if (!selectEl) return;
                 const currentVal = selectEl.value || loadLocalData('gys_local_env_program_cd');
@@ -952,6 +927,10 @@
                         statusText = stateNm;
                         statusColor = '#ed2222';
                         isDisabled = false;
+                    } else {
+                        statusText = stateNm;
+                        statusColor = '#ed2222';
+                        isDisabled = false;
                     }
 
                     const dateBtn = document.createElement('button');
@@ -988,21 +967,65 @@
 
                     let pressTimer = null;
                     let isLongPress = false;
-					let pendingRefund = null;
                     let startX = 0, startY = 0;
-
+                    
+                    const resetPressVisual = () => {
+                        dateBtn.style.transition = 'all 0.15s';
+                        dateBtn.style.backgroundColor = isClosedDay ? '#f8f9fa' : '#ffffff';
+                        dateBtn.style.boxShadow = '';
+                    };
+                    
                     const startLongPressCheck = (e) => {
-						if (formattedResveDate < getTodayYMD()) return;
-						isLongPress = false; pendingRefund = null;
-						if (e.touches && e.touches.length > 0) { startX = e.touches[0].clientX; startY = e.touches[0].clientY; }
-						pressTimer = setTimeout(() => {
-							const resObj = getLocalReservationsMap()[formattedResveDate];
-							if (!resObj || resObj.type !== 'server' || !resObj.data) return;
-							isLongPress = true;
-							pendingRefund = resObj.data;
-							if (navigator.vibrate) navigator.vibrate(30);
-						}, 700);
-					};
+                        if (formattedResveDate < getTodayYMD()) return;
+                        isLongPress = false;
+                        if (e.touches && e.touches.length > 0) {
+                            startX = e.touches[0].clientX;
+                            startY = e.touches[0].clientY;
+                        }
+                        
+                        const resObj0 = getLocalReservationsMap()[formattedResveDate];
+                        const canRefund = !!(resObj0 && resObj0.type === 'server' && resObj0.data);
+                        if (canRefund) {
+                            dateBtn.style.transition = 'background-color 0.7s linear';   // 누르는 동안 서서히 붉게
+                            dateBtn.style.backgroundColor = '#ff4d4d';
+                        }
+                            
+                        pressTimer = setTimeout(() => {
+                            isLongPress = true;
+                            dateBtn.style.boxShadow = 'inset 0 0 0 3px #ed2222';
+                            const reservationsMap = getLocalReservationsMap();
+                            const resObj = reservationsMap[formattedResveDate];
+
+                            if (!resObj || resObj.type !== 'server' || !resObj.data) {
+                                return;
+                            }
+
+                            const d = resObj.data;
+                            const slipNo = d.slip_no || '';
+                            const comcd = d.comcd || 'GYS10';
+                            const resveNo = d.entr_res_idx || '';
+                            const requestNo = d.req_no !== undefined ? d.req_no : 0;
+                            const timeIdx = d.res_time_idx || 1;
+                            const useDate = d.use_date || '';
+                            const timeName = d.time_name || '';
+
+                            if (!resveNo || !slipNo) {
+                                alert('환불에 필요한 상세 예약 번호가 누락되었습니다.');
+                                return;
+                            }
+
+                            if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
+                                const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
+                                openUrlInNewTab(refundUrl);
+
+                                tempReservationsMap = {
+                                    'type': 'delete',
+                                    'resve_date': useDate.replace(/-/g, ''),
+                                    'time_name': timeName
+                                };
+                            }
+                        }, 700);
+                    };
 
                     const handleTouchMove = (e) => {
                         if (!pressTimer) return;
@@ -1020,6 +1043,7 @@
                             clearTimeout(pressTimer);
                             pressTimer = null;
                         }
+                        resetPressVisual();
                     };
 
                     dateBtn.addEventListener('mousedown', startLongPressCheck);
@@ -1027,25 +1051,16 @@
                     dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
                     dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: true });
                     dateBtn.addEventListener('touchmove', handleTouchMove, { passive: true });
-					dateBtn.addEventListener('touchend', (e) => {
-						cancelLongPressCheck();
-						if (isLongPress && pendingRefund) {
-							e.preventDefault();   // 뒤따르는 가짜 mouse/click 이벤트를 막음
-							const d = pendingRefund; isLongPress = false; pendingRefund = null;
-							requestRefund(d);
-						}
-					});
+                    dateBtn.addEventListener('touchend', cancelLongPressCheck);
                     dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
 
                     dateBtn.addEventListener('click', async (e) => {
                         e.stopPropagation();
-						if (isLongPress) {
-							e.preventDefault();
-							const d = pendingRefund; isLongPress = false; pendingRefund = null;
-							if (d) requestRefund(d);
-							return;
-						}
-						
+                        if (isLongPress) {
+                            e.preventDefault();
+                            return;
+                        }
+                        
                         if (isDisabled || formattedResveDate < getTodayYMD()) return;
 
                         const timeSelectEl = document.getElementById('gys-time-select');
@@ -1064,27 +1079,20 @@
                         }
 
                         const selectedTimeText = timeSelectEl.options[timeSelectEl.selectedIndex]?.textContent || '';
-						
-						if (!selectedTimeSeq || !selectedProgramCode) { alert('시간대/상품이 선택되지 않았습니다.'); return; }
-						
-						if (!win.ISLOGIN) { alert('로그인이 필요한 서비스입니다.'); handleLoginRedirect(); return; }
-						const popup = openBlankWindow();
-						if (!popup) {
-							alert('팝업이 차단되었습니다. 이 사이트의 팝업을 허용한 뒤 다시 눌러 주세요.');
-							return;                          // API 호출 전에 중단하므로 좌석이 잡히지 않음
-						}
+                        
+                        if (!selectedTimeSeq || !selectedProgramCode) { alert('시간대/상품이 선택되지 않았습니다.'); return; }
 
-						dateBtn.disabled = true;
-						if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false, popup)) {
-							tempReservationsMap = {
-								'type': 'assign',
-								'resve_date': formattedResveDate,
-								'time_name': selectedTimeText
-							};
-						} else {
-							dateBtn.style.backgroundColor = '#f8d7da';
-						}
-						dateBtn.disabled = false;
+                        dateBtn.disabled = true;
+                        if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {
+                            tempReservationsMap = {
+                                'type': 'assign',
+                                'resve_date': formattedResveDate,
+                                'time_name': selectedTimeText
+                            };
+                        } else {
+                            dateBtn.style.backgroundColor = '#f8d7da';
+                        }
+                        dateBtn.disabled = false;
                     });
                     btnContainer.appendChild(dateBtn);
                 });

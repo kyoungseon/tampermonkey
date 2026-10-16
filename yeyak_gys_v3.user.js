@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V3
 // @namespace   http://tampermonkey.net/
-// @version     3.2.3
+// @version     3.2.4
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -10,7 +10,6 @@
 // @match       https://yeyak.gys.or.kr/fmcs/27*
 // @grant       window.close
 // @grant       unsafeWindow
-// @grant       GM_xmlhttpRequest
 // @run-at      document-start
 // ==/UserScript==
 (function() {
@@ -361,6 +360,11 @@
                         return true;
                     }
                 }
+				saveLocalData('gys_local_mem_no', memNo);
+				saveLocalData('gys_local_mem_nm', '미발급');
+				updateUserNameBtnLabel();
+
+				return true;
             } catch (err) {}
 
             resetLoginState();
@@ -407,13 +411,13 @@
                 if (pureDate.substring(0, 6) === currentCalYM) {
                     const resObj = reservationsByDate[pureDate];
                     const dateBtn = document.querySelector(`.gys-dynamic-date-btn[data-resve-date="${pureDate}"]`);
-                    if (dateBtn && resObj?.time_name) {
+                    if (dateBtn && resObj?.data.time_name) {
                         const infoBadge = dateBtn.querySelector('.gys-info-badge');
                         if (infoBadge) {
-                            const rawTimeName = resObj.time_name.replace(/<br>/g, ' ').trim();
+                            const rawTimeName = resObj.data.time_name.replace(/<br>/g, ' ').trim();
                             infoBadge.setAttribute('title', rawTimeName);
 
-                            const parsedObj = parseTimeTo4Lines(resObj.time_name);
+                            const parsedObj = parseTimeTo4Lines(resObj.data.time_name);
                             const isServer = resObj.type === 'server';
                             infoBadge.innerHTML = `
                                 <div style="background-color: ${isServer ? '#2e7d32' : '#1565c0'}; border: 1px solid ${isServer ? '#1b5e20' : '#0d47a1'}; color: #ffffff; border-radius: 4px; padding: 2px 1px; width: calc(100% - 6px); height: calc(100% - 6px); box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.0;">
@@ -438,7 +442,7 @@
             if (Array.isArray(resData)) {
                 resData.forEach(item => {
                     if (String(item.app_type) === "30" && item.use_date && item.time_name) {
-                        newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', time_name: item.time_name, data: item };
+                        newReservationsMap[item.use_date.replace(/-/g, '')] = { type: 'server', data: item };
                     }
                 });
             }
@@ -449,8 +453,7 @@
         document.addEventListener('visibilitychange', async () => {
             if (document.visibilityState === 'visible') {
                 const changeFlag = loadLocalData('gys_local_change_resve');
-                const isLoggedIn = await checkTabSessionStatus(false);
-                if (isLoggedIn && changeFlag === 'true') {
+                if (changeFlag === 'true') {
                     removeLocalData('gys_local_change_resve');
 
                     if (typeof tempReservationsMap !== 'undefined' && tempReservationsMap && tempReservationsMap.type) {
@@ -459,7 +462,7 @@
                         if(tempReservationsMap.type === 'assign') {
                             reservationsMap[tempReservationsMap.resve_date] = {
                                 type: 'manual',
-                                time_name: tempReservationsMap.time_name
+								data: {time_name: tempReservationsMap.time_name}
                             };
                         } else {
                             delete reservationsMap[tempReservationsMap.resve_date];
@@ -495,18 +498,20 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
-        function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
-            return new Promise((resolve) => {
+		function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
+            return new Promise(async (resolve) => {
                 if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
                     isAutoLink ? handleLoginRedirect(true) : handleLoginRedirect();
-                    resolve(false); return;
+                    resolve(false);
+                    return;
                 }
 
-                const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO || ''}&user_cnt=1&_=` + Date.now();
+                const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO}&user_cnt=1&_=` + Date.now();
+
                 const handleResponseData = (data) => {
-                    if (data.result_code != 0) {
-                        alert(data.result_message || '예약에 실패했습니다.');
+                    if (!data || data.result_code != 0) {
+                        alert(data?.result_message || '예약에 실패했습니다.');
                         resolve(false);
                         return;
                     }
@@ -519,21 +524,10 @@
                     resolve(true);
                 };
 
-                const startReqTime = Date.now();
-                if (typeof GM_xmlhttpRequest !== 'undefined') {
-                    GM_xmlhttpRequest({
-                        method: "GET", url: win.location.origin + targetApiUrl, headers: { "X-Requested-With": "XMLHttpRequest" },
-                        onload: (response) => {
-                            updateServerTimeOffset(response, startReqTime);
-                            try { handleResponseData(JSON.parse(response.responseText)); } catch (e) { handleError(); }
-                        },
-                        onerror: handleError
-                    });
+                const data = await fetchWithServerTime(targetApiUrl, 'json');
+                if (data) {
+                    handleResponseData(data);
                 } else {
-                    fetchWithServerTime(targetApiUrl).then(data => { if (data) handleResponseData(data); else handleError(); });
-                }
-
-                function handleError() {
                     alert('예약 요청 중 오류가 발생했습니다.');
                     resolve(false);
                 }
@@ -768,10 +762,9 @@
             });
 
             document.getElementById('gys-refresh-res-btn').addEventListener('click', async () => {
-                const isLoggedIn = await checkTabSessionStatus(false);
-                if (!isLoggedIn) {
+				if (typeof win.ISLOGIN !== 'undefined' && !win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
-                    return;
+					return;
                 }
 
                 await refreshUserReservationsAsync();

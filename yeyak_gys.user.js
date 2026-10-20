@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace    http://tampermonkey.net/
-// @version      4.2.6
+// @version      4.2.7
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -240,38 +240,10 @@
         const isQuickCloseTab = isFromPanelParam || loadSessionData('gys_session_quick_close_tab') === 'true';
 		if (actionParam === 'paymentResult') {
             saveLocalData('gys_local_change_resve', 'true');
-            if (isQuickCloseTab) {
-                try {
-                    window.stop();
-                } catch (e) {}
-
-                try { win.opener = null; } catch (e) {}
-
-                // 1. 서버 스크립트가 페이지를 이동시키거나(location.href) 
-                // 다른 짓을 하지 못하도록 location 객체의 setter를 차단하거나 강제 고정
-                try {
-                    Object.defineProperty(win, 'location', {
-                        set: function(val) { /* 페이지 이동 시도 무시 */ },
-                        get: function() { return window.location; }
-                    });
-                } catch (e) {}
-
-                // 2. 서버가 띄우려는 기존 alert을 무력화하고 곧바로 창 닫기 실행
-                win.alert = function(msg) {
-                    // 서버 경고창은 무시하고 바로 창 닫기 수행
-                };
-
-                // 3. 지연 없이 즉시 알림 후 창 닫기 시도
-                setTimeout(function() {
-                    alert("🎉빠른닫기🎉 예약이 정상 처리되었습니다!");
-                    window.close();
-                }, 10);
-            }
             return;
         }
         if (actionParam === 'reg_read') {
             if (isQuickCloseTab) {
-                saveLocalData('gys_local_change_resve', 'true');
                 removeSessionData('gys_session_quick_close_tab');
 
                 const isRefundPath = currentPath.includes('/fmcs/122');
@@ -279,12 +251,11 @@
                     ? "🗑️ 환불이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?"
                     : "🎉 예약이 정상 처리되었습니다!\n\n현재 탭을 닫으시겠습니까?";
 
-                const handleRegReadConfirm = () => setTimeout(() => {
-                    if (confirm(alertMsg)) window.close();
-                }, 350);
-
-                if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRegReadConfirm);
-                else handleRegReadConfirm();
+                try { win.opener = null; } catch (e) {}
+                
+                if (confirm(alertMsg)) {
+                    window.close();
+                }
             }
             return;
         }

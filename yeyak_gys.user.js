@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     4.1.16
+// @version     4.1.17
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -534,9 +534,6 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
-// ==========================================
-        // 모바일 최적화 커스텀 레이어 팝업 (결제/환불 선택용)
-        // ==========================================
         function showCustomActionModal(title, message, actionText, mainBtnColor, onConfirm, onCancel) {
             const existingModal = document.getElementById('gys-custom-action-modal');
             if (existingModal) existingModal.remove();
@@ -569,17 +566,15 @@
             const btnContainer = document.createElement('div');
             Object.assign(btnContainer.style, { display: 'flex', flexDirection: 'column', gap: '12px' });
 
-            // 상단 메인 버튼 (높이와 글자 크기를 대폭 키우고 완벽한 flex 중앙 정렬 적용)
             const mainBtn = document.createElement('button');
             mainBtn.innerText = actionText;
             Object.assign(mainBtn.style, {
-                width: '100%', height: '65px', padding: '0', backgroundColor: mainBtnColor || '#2b6cb0', color: '#fff',
-                border: 'none', borderRadius: '14px', fontSize: '20px', fontWeight: 'bold',
+                width: '100%', height: '120px', padding: '0', backgroundColor: mainBtnColor || '#2b6cb0', color: '#fff',
+                border: 'none', borderRadius: '16px', fontSize: '26px', fontWeight: 'bold',
                 cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box'
             });
 
-            // 하단 취소 버튼 (적당한 높이와 flex 중앙 정렬 적용)
             const cancelBtn = document.createElement('button');
             cancelBtn.innerText = '취소';
             Object.assign(cancelBtn.style, {
@@ -1280,7 +1275,7 @@
                         const canRefund = !!(resObj0 && resObj0.type === 'server' && resObj0.data);
                         if (canRefund) {
                             dateBtn.style.transition = 'background-color 0.7s linear';
-                            dateBtn.style.backgroundColor = '#fde8e8';
+                            dateBtn.style.backgroundColor = '#c53030';
                         }
 
                         pressTimer = setTimeout(() => {

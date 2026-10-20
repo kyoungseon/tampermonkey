@@ -1,16 +1,16 @@
 // ==UserScript==
-// @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
-// @namespace    http://tampermonkey.net/
-// @version      4.2.9
+// @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
+// @namespace   http://tampermonkey.net/
+// @version     4.2.10
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
-// @author       SS2225
-// @match        https://yeyak.gys.or.kr/fmcs/102
-// @match        https://yeyak.gys.or.kr/fmcs/102?*
-// @match        https://yeyak.gys.or.kr/fmcs/122?*
-// @match        https://yeyak.gys.or.kr/fmcs/27*
-// @grant        window.close
-// @grant        unsafeWindow
-// @run-at       document-start
+// @author      SS2225
+// @match       https://yeyak.gys.or.kr/fmcs/102
+// @match       https://yeyak.gys.or.kr/fmcs/102?*
+// @match       https://yeyak.gys.or.kr/fmcs/122?*
+// @match       https://yeyak.gys.or.kr/fmcs/27*
+// @grant       window.close
+// @grant       unsafeWindow
+// @run-at      document-start
 // ==/UserScript==
 (function() {
     'use strict';
@@ -19,7 +19,7 @@
 
     let serverTimeOffsetMs = 0;
     let tempReservationsMap = null;
-	let tempReservationNo = null;
+    let tempReservationNo = null;
 
     const LOCAL_DEFAULT_VALUES = {
         'gys_local_env_resve_day': '15',
@@ -284,18 +284,18 @@
                 try { win.opener = null; } catch (e) {}
                 saveSessionData('gys_session_quick_close_tab', 'true');
 
-				const handleRefundAutoClick = () => {
-					let tries = 0;
-					const timer = setInterval(() => {
-						const refundForm = document.getElementById('refundForm');
-						if (refundForm) {
-							clearInterval(timer);
-							refundForm.submit();
-						} else if (++tries > 25) {
-							clearInterval(timer);
-						}
-					}, 200);
-				};
+                const handleRefundAutoClick = () => {
+                    let tries = 0;
+                    const timer = setInterval(() => {
+                        const refundForm = document.getElementById('refundForm');
+                        if (refundForm) {
+                            clearInterval(timer);
+                            refundForm.submit();
+                        } else if (++tries > 25) {
+                            clearInterval(timer);
+                        }
+                    }, 200);
+                };
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRefundAutoClick);
                 else handleRefundAutoClick();
             }
@@ -675,7 +675,7 @@
                 if (isAutoLink) {
                     window.location.href = targetUrl + '&from_panel=true';
                 } else {
-					tempReservationNo = data.r_num;
+                    tempReservationNo = data.r_num;
                     showCustomActionModal(
                         '결제 진행',
                         '예약이 완료되었습니다.\n지금 바로 결제를 진행하시겠습니까?',
@@ -683,7 +683,7 @@
                         '#2b6cb0',
                         () => {
                             openUrlInNewTab(targetUrl);
-							
+                            
                             resolve(true);
                         },
                         () => {
@@ -742,7 +742,12 @@
             const style = document.createElement('style');
             style.id = 'gys-responsive-style';
             style.textContent = `
-                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; -webkit-user-select: none; user-select: none; }
+                #gys-custom-panel, #gys-custom-panel * {
+                    -webkit-touch-callout: none !important;
+                    -webkit-user-select: none !important;
+                    user-select: none !important;
+                }
+                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
                 .gys-dynamic-date-btn, #gys-custom-panel button, #gys-custom-panel select { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
                 div[class*="chatbot"], div[id*="chatbot"], div[class*="happyment"], div[id*="happyment"], iframe[src*="chatbot"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
                 @media (min-width: 769px) {
@@ -1002,7 +1007,8 @@
                 let timePressTimer = null;
                 const START_LONG_PRESS_TIME = 700;
 
-                const startTimeLongPress = () => {
+                const startTimeLongPress = (e) => {
+                    if (e.cancelable) e.preventDefault();
                     timePressTimer = setTimeout(() => {
                         const options = timeSelectEl.options;
                         if (!options || options.length === 0) {
@@ -1028,7 +1034,7 @@
                 timeSelectEl.addEventListener('mousedown', startTimeLongPress);
                 timeSelectEl.addEventListener('mouseup', cancelTimeLongPress);
                 timeSelectEl.addEventListener('mouseleave', cancelTimeLongPress);
-                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: true });
+                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: false });
                 timeSelectEl.addEventListener('touchend', cancelTimeLongPress);
                 timeSelectEl.addEventListener('touchcancel', cancelTimeLongPress);
             }
@@ -1259,6 +1265,7 @@
                     };
 
                     const startLongPressCheck = (e) => {
+                        if (e.cancelable) e.preventDefault();
                         if (formattedResveDate < getTodayYMD()) return;
                         isLongPress = false;
                         if (e.touches && e.touches.length > 0) {
@@ -1305,7 +1312,7 @@
                                         'type': 'delete',
                                         'resve_date': useDate.replace(/-/g, ''),
                                         'time_name': timeName,
-										'r_num': resveNo
+                                        'r_num': resveNo
                                     };
                                 },
                                 () => {},
@@ -1336,7 +1343,7 @@
                     dateBtn.addEventListener('mousedown', startLongPressCheck);
                     dateBtn.addEventListener('mouseup', cancelLongPressCheck);
                     dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
-                    dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: true });
+                    dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: false });
                     dateBtn.addEventListener('touchmove', handleTouchMove, { passive: true });
                     dateBtn.addEventListener('touchend', cancelLongPressCheck);
                     dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
@@ -1374,9 +1381,9 @@
                             tempReservationsMap = {
                                 'type': 'assign',
                                 'resve_date': formattedResveDate,
-								'use_date': rawDate,
+                                'use_date': rawDate,
                                 'time_name': selectedTimeText,
-								'r_num': tempReservationNo
+                                'r_num': tempReservationNo
                             };
                         } else {
                             dateBtn.style.backgroundColor = '#f8d7da';

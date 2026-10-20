@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     4.1.15
+// @version     4.1.16
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -534,6 +534,81 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
+// ==========================================
+        // 모바일 최적화 커스텀 레이어 팝업 (결제/환불 선택용)
+        // ==========================================
+        function showCustomActionModal(title, message, actionText, mainBtnColor, onConfirm, onCancel) {
+            const existingModal = document.getElementById('gys-custom-action-modal');
+            if (existingModal) existingModal.remove();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'gys-custom-action-modal';
+            Object.assign(overlay.style, {
+                position: 'fixed', top: '0', left: '0', width: '100%', height: '100%',
+                backgroundColor: 'rgba(0, 0, 0, 0.65)', zIndex: '999999',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                padding: '20px', boxSizing: 'border-box'
+            });
+
+            const modalBox = document.createElement('div');
+            Object.assign(modalBox.style, {
+                backgroundColor: '#ffffff', width: '100%', maxWidth: '340px',
+                borderRadius: '16px', padding: '24px 20px', boxSizing: 'border-box',
+                boxShadow: '0 10px 25px rgba(0,0,0,0.3)', textAlign: 'center',
+                fontFamily: 'Malgun Gothic, sans-serif'
+            });
+
+            const titleEl = document.createElement('h3');
+            titleEl.innerText = title;
+            Object.assign(titleEl.style, { margin: '0 0 12px 0', fontSize: '18px', color: '#1a202c', fontWeight: '700' });
+
+            const msgEl = document.createElement('p');
+            msgEl.innerHTML = message.replace(/\n/g, '<br>');
+            Object.assign(msgEl.style, { margin: '0 0 24px 0', fontSize: '15px', color: '#4a5568', lineHeight: '1.5', wordBreak: 'keep-all' });
+
+            const btnContainer = document.createElement('div');
+            Object.assign(btnContainer.style, { display: 'flex', flexDirection: 'column', gap: '12px' });
+
+            // 상단 메인 버튼 (높이와 글자 크기를 대폭 키우고 완벽한 flex 중앙 정렬 적용)
+            const mainBtn = document.createElement('button');
+            mainBtn.innerText = actionText;
+            Object.assign(mainBtn.style, {
+                width: '100%', height: '65px', padding: '0', backgroundColor: mainBtnColor || '#2b6cb0', color: '#fff',
+                border: 'none', borderRadius: '14px', fontSize: '20px', fontWeight: 'bold',
+                cursor: 'pointer', boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box'
+            });
+
+            // 하단 취소 버튼 (적당한 높이와 flex 중앙 정렬 적용)
+            const cancelBtn = document.createElement('button');
+            cancelBtn.innerText = '취소';
+            Object.assign(cancelBtn.style, {
+                width: '100%', height: '45px', padding: '0', backgroundColor: '#edf2f7', color: '#718096',
+                border: 'none', borderRadius: '10px', fontSize: '15px', fontWeight: '600',
+                cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box'
+            });
+
+            mainBtn.onclick = () => {
+                overlay.remove();
+                if (typeof onConfirm === 'function') onConfirm();
+            };
+
+            cancelBtn.onclick = () => {
+                overlay.remove();
+                if (typeof onCancel === 'function') onCancel();
+            };
+
+            btnContainer.appendChild(mainBtn);
+            btnContainer.appendChild(cancelBtn);
+
+            modalBox.appendChild(titleEl);
+            modalBox.appendChild(msgEl);
+            modalBox.appendChild(btnContainer);
+            overlay.appendChild(modalBox);
+            document.body.appendChild(overlay);
+        }
+
         function showLoadingOverlay(message = "예약 요청 중입니다...") {
             let overlay = document.getElementById('gys-loading-overlay');
             if (!overlay) {
@@ -596,24 +671,34 @@
                 }
 
                 const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
+                
                 if (isAutoLink) {
                     window.location.href = targetUrl + '&from_panel=true';
                 } else {
                     const useConfirmPopup = loadLocalData('gys_local_env_use_confirm_popup') !== 'false';
                     if (useConfirmPopup) {
-                        if (!confirm(`[${formatMMDD(resve_date)}] 날짜로 예약을 진행하시겠습니까?`)) {
-                            resolve(false);
-                            if (data.r_num) {
-                                fetch(`/fmcs/102?comcd=GYS10&resve_no=${data.r_num}&action=cancel`, { credentials: 'include' })
-                                    .then(res => {
-                                        if (!res.ok) alert('예약 취소 처리에 실패했습니다.');
-                                    })
-                                    .catch(() => alert('예약 취소 요청 중 오류가 발생했습니다.'));
+                        showCustomActionModal(
+                            '결제 진행',
+                            '예약이 완료되었습니다.\n지금 바로 결제를 진행하시겠습니까?',
+                            '결제하기',
+                            '#2b6cb0',
+                            () => {
+                                openUrlInNewTab(targetUrl);
+                                resolve(true);
+                            },
+                            () => {
+                                resolve(false);
+                                if (data.r_num) {
+                                    fetch(`/fmcs/102?comcd=GYS10&resve_no=${data.r_num}&action=cancel`, { credentials: 'include' })
+                                        .then(res => { if (!res.ok) alert('예약 취소 처리에 실패했습니다.'); })
+                                        .catch(() => alert('예약 취소 요청 중 오류가 발생했습니다.'));
+                                }
                             }
-                            return;
-                        }
+                        );
+                        return;
+                    } else {
+                        openUrlInNewTab(targetUrl);
                     }
-                    openUrlInNewTab(targetUrl);
                 }
                 resolve(true);
             });
@@ -998,7 +1083,6 @@
                 showLoadingOverlay("🔄 예약현황 조회 중...");
                 await refreshUserReservationsAsync();
                 hideLoadingOverlay();
-                alert('예약현황이 조회되었습니다.');
             });
 
             async function updateProgramSelectOptions(targetDate, isManualClick = false) {
@@ -1222,16 +1306,26 @@
                                 return;
                             }
 
-                            if (confirm(`${useDate} : ${timeName}\n환불 신청 하시겠습니까?`)) {
-                                const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
-                                openUrlInNewTab(refundUrl);
+                            // 환불 신청 시에도 커스텀 팝업 적용 (높이와 글자 크기 확대, 완벽한 정중앙 정렬)
+                            showCustomActionModal(
+                                '환불 신청',
+                                `${useDate} : ${timeName}\n환불 신청 하시겠습니까?`,
+                                '환불 신청하기',
+                                '#c53030', // 붉은 계열 (환불/취소 느낌)
+                                () => {
+                                    const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
+                                    openUrlInNewTab(refundUrl);
 
-                                tempReservationsMap = {
-                                    'type': 'delete',
-                                    'resve_date': useDate.replace(/-/g, ''),
-                                    'time_name': timeName
-                                };
-                            }
+                                    tempReservationsMap = {
+                                        'type': 'delete',
+                                        'resve_date': useDate.replace(/-/g, ''),
+                                        'time_name': timeName
+                                    };
+                                },
+                                () => {
+                                    // 취소 버튼 클릭 시 별도 동작 없음
+                                }
+                            );
                         }, 700);
                     };
 

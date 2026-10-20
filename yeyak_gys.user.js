@@ -1,16 +1,16 @@
 // ==UserScript==
-// @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
-// @namespace   http://tampermonkey.net/
-// @version     4.1.17
+// @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
+// @namespace    http://tampermonkey.net/
+// @version      4.2.1
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
-// @author      SS2225
-// @match       https://yeyak.gys.or.kr/fmcs/102
-// @match       https://yeyak.gys.or.kr/fmcs/102?*
-// @match       https://yeyak.gys.or.kr/fmcs/122?*
-// @match       https://yeyak.gys.or.kr/fmcs/27*
-// @grant       window.close
-// @grant       unsafeWindow
-// @run-at      document-start
+// @author       SS2225
+// @match        https://yeyak.gys.or.kr/fmcs/102
+// @match        https://yeyak.gys.or.kr/fmcs/102?*
+// @match        https://yeyak.gys.or.kr/fmcs/122?*
+// @match        https://yeyak.gys.or.kr/fmcs/27*
+// @grant        window.close
+// @grant        unsafeWindow
+// @run-at       document-start
 // ==/UserScript==
 (function() {
     'use strict';
@@ -24,8 +24,7 @@
         'gys_local_env_resve_day': '15',
         'gys_local_env_resve_time_seq': '',
         'gys_local_env_program_cd': 'I000221',
-        'gys_local_env_mem_nm': '-',
-        'gys_local_env_use_confirm_popup': 'true'
+        'gys_local_env_mem_nm': '-'
     };
 
     const loadLocalData = (key) => {
@@ -238,6 +237,7 @@
 
     if (actionParam) {
         const isQuickCloseTab = isFromPanelParam || loadSessionData('gys_session_quick_close_tab') === 'true';
+
         if (actionParam === 'reg_read') {
             if (isQuickCloseTab) {
                 saveLocalData('gys_local_change_resve', 'true');
@@ -446,7 +446,7 @@
                 if (pureDate.substring(0, 6) === currentCalYM) {
                     const resObj = reservationsByDate[pureDate];
                     const dateBtn = document.querySelector(`.gys-dynamic-date-btn[data-resve-date="${pureDate}"]`);
-                    if (dateBtn && resObj?.data.time_name) {
+                    if (dateBtn && resObj?.data?.time_name) {
                         const infoBadge = dateBtn.querySelector('.gys-info-badge');
                         if (infoBadge) {
                             const rawTimeName = resObj.data.time_name.replace(/<br>/g, ' ').trim();
@@ -534,7 +534,7 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
-        function showCustomActionModal(title, message, actionText, mainBtnColor, onConfirm, onCancel) {
+        function showCustomActionModal(title, message, actionText, mainBtnColor, onConfirm, onCancel, guardUntilRelease = false) {
             const existingModal = document.getElementById('gys-custom-action-modal');
             if (existingModal) existingModal.remove();
 
@@ -583,13 +583,23 @@
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box'
             });
-
+            
+            let armed = !guardUntilRelease;
+            if (guardUntilRelease) {
+                const arm = () => setTimeout(() => { armed = true; }, 400);
+                ['touchend', 'touchcancel', 'mouseup'].forEach(t =>
+                    document.addEventListener(t, arm, { once: true, capture: true }));
+                setTimeout(() => { armed = true; }, 3000);
+            }
+            
             mainBtn.onclick = () => {
+                if (!armed) return;
                 overlay.remove();
                 if (typeof onConfirm === 'function') onConfirm();
             };
 
             cancelBtn.onclick = () => {
+                if (!armed) return;
                 overlay.remove();
                 if (typeof onCancel === 'function') onCancel();
             };
@@ -670,30 +680,26 @@
                 if (isAutoLink) {
                     window.location.href = targetUrl + '&from_panel=true';
                 } else {
-                    const useConfirmPopup = loadLocalData('gys_local_env_use_confirm_popup') !== 'false';
-                    if (useConfirmPopup) {
-                        showCustomActionModal(
-                            '결제 진행',
-                            '예약이 완료되었습니다.\n지금 바로 결제를 진행하시겠습니까?',
-                            '결제하기',
-                            '#2b6cb0',
-                            () => {
-                                openUrlInNewTab(targetUrl);
-                                resolve(true);
-                            },
-                            () => {
-                                resolve(false);
-                                if (data.r_num) {
-                                    fetch(`/fmcs/102?comcd=GYS10&resve_no=${data.r_num}&action=cancel`, { credentials: 'include' })
-                                        .then(res => { if (!res.ok) alert('예약 취소 처리에 실패했습니다.'); })
-                                        .catch(() => alert('예약 취소 요청 중 오류가 발생했습니다.'));
-                                }
+                    showCustomActionModal(
+                        '결제 진행',
+                        '예약이 완료되었습니다.\n지금 바로 결제를 진행하시겠습니까?',
+                        '결제하기',
+                        '#2b6cb0',
+                        () => {
+                            openUrlInNewTab(targetUrl);
+                            resolve(true);
+                        },
+                        () => {
+                            resolve(false);
+                            if (data.r_num) {
+                                fetch(`/fmcs/102?comcd=GYS10&resve_no=${data.r_num}&action=cancel`, { credentials: 'include' })
+                                    .then(res => { if (!res.ok) alert('예약 취소 처리에 실패했습니다.'); })
+                                    .catch(() => alert('예약 취소 요청 중 오류가 발생했습니다.'));
                             }
-                        );
-                        return;
-                    } else {
-                        openUrlInNewTab(targetUrl);
-                    }
+                        },
+                        false
+                    );
+                    return;
                 }
                 resolve(true);
             });
@@ -715,10 +721,20 @@
             const clockEl = document.getElementById('gys-realtime-clock');
             const clockContainerEl = document.getElementById('gys-realtime-clock-container');
             if (!clockEl || !clockContainerEl) return;
+
+            let lastSecond = -1;
+
             const renderClockAndGauge = () => {
                 const now = new Date(Date.now() + serverTimeOffsetMs);
-                clockEl.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(now.getSeconds()).padStart(2, '0')}`;
+                const currentSecond = now.getSeconds();
+
+                if (currentSecond !== lastSecond) {
+                    lastSecond = currentSecond;
+                    clockEl.textContent = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:${String(currentSecond).padStart(2, '0')}`;
+                }
+
                 clockContainerEl.style.background = `linear-gradient(to right, #e2e8f0 ${(now.getMilliseconds() / 1000) * 100}%, #ffffff 0%)`;
+                
                 requestAnimationFrame(renderClockAndGauge);
             };
             requestAnimationFrame(renderClockAndGauge);
@@ -811,8 +827,6 @@
                 dayOptionsHtml += `<option value="${ddStr}" ${ddStr === settingResveDay ? 'selected' : ''}>매월 ${ddStr}일</option>`;
             }
 
-            const currentUseConfirmPopup = loadLocalData('gys_local_env_use_confirm_popup') !== 'false';
-
             const popupOverlay = document.createElement('div');
             popupOverlay.id = 'gys-smartphone-modal-overlay';
             Object.assign(popupOverlay.style, {
@@ -823,23 +837,19 @@
             });
 
             popupOverlay.innerHTML = `
-                <div style="background-color: #f8f9fa; width: 320px; height: 440px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
+                <div style="background-color: #f8f9fa; width: 320px; height: 380px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
                         <span style="font-size: 13px; font-weight: bold;">설정 및 계정 관리</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                     </div>
                     <div style="background-color: #ffffff; padding: 14px; flex: 1; overflow-y: auto; box-sizing: border-box;">
-                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
                             <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약일 설정</label>
                             <select id="gys-setting-resve-day-select" style="width: 140px; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
                                 ${dayOptionsHtml}
                             </select>
                         </div>
-                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
-                            <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약 확인 팝업 사용</label>
-                            <input type="checkbox" id="gys-setting-confirm-popup-check" ${currentUseConfirmPopup ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
-                        </div>
-                        <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 10px 0;">
+                        <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 12px 0;">
                         <div>
                             <div style="font-size: 12px; font-weight: bold; color: #274081; margin-bottom: 6px;">📋 저장된 계정 목록 관리</div>
                             <div style="font-size: 10.5px; color: #666666; margin-bottom: 8px;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
@@ -1058,13 +1068,6 @@
                 });
             }
 
-            const confirmPopupCheckEl = document.getElementById('gys-setting-confirm-popup-check');
-            if (confirmPopupCheckEl) {
-                confirmPopupCheckEl.addEventListener('change', function() {
-                    saveLocalData('gys_local_env_use_confirm_popup', this.checked ? 'true' : 'false');
-                });
-            }
-
             document.getElementById('gys-capture-btn').addEventListener('click', () => {
                 capturePanelToPng();
             });
@@ -1076,8 +1079,7 @@
                 }
 
                 showLoadingOverlay("🔄 예약현황 조회 중...");
-                await refreshUserReservationsAsync();
-                hideLoadingOverlay();
+                try { await refreshUserReservationsAsync(); } finally { hideLoadingOverlay(); }
             });
 
             async function updateProgramSelectOptions(targetDate, isManualClick = false) {
@@ -1154,10 +1156,6 @@
                     const hasClose = item.close_advice && item.close_advice.trim() !== '';
                     return !(dayOfWeek === 2 || hasClose || item.state_cd === "30");
                 })?.date || currentMonthItems[0]?.date || "";
-
-                if (firstWorkDateHyphen) {
-                    await updateAllOptions(firstWorkDateHyphen, false);
-                }
 
                 btnContainer.innerHTML = '';
                 const prevMonthLastDay = new Date(curYear, curMonth, 0).getDate();
@@ -1279,13 +1277,13 @@
                         }
 
                         pressTimer = setTimeout(() => {
-                            isLongPress = true;
                             const reservationsMap = getLocalReservationsMap();
                             const resObj = reservationsMap[formattedResveDate];
 
                             if (!resObj || resObj.type !== 'server' || !resObj.data) {
                                 return;
                             }
+                            isLongPress = true;
 
                             const d = resObj.data;
                             const slipNo = d.slip_no || '';
@@ -1301,12 +1299,11 @@
                                 return;
                             }
 
-                            // 환불 신청 시에도 커스텀 팝업 적용 (높이와 글자 크기 확대, 완벽한 정중앙 정렬)
                             showCustomActionModal(
                                 '환불 신청',
                                 `${useDate} : ${timeName}\n환불 신청 하시겠습니까?`,
                                 '환불 신청하기',
-                                '#c53030', // 붉은 계열 (환불/취소 느낌)
+                                '#c53030',
                                 () => {
                                     const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
                                     openUrlInNewTab(refundUrl);
@@ -1317,9 +1314,8 @@
                                         'time_name': timeName
                                     };
                                 },
-                                () => {
-                                    // 취소 버튼 클릭 시 별도 동작 없음
-                                }
+                                () => {},
+                                true
                             );
                         }, 700);
                     };
@@ -1411,6 +1407,10 @@
 
                 renderReservationStatusMap();
                 scrollToPanelTop();
+                
+                if (firstWorkDateHyphen) {
+                    updateAllOptions(firstWorkDateHyphen, false);
+                }
             }
 
             const ymBtn = document.getElementById('gys-ym-reload-btn');

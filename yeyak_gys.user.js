@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace    http://tampermonkey.net/
-// @version      4.2.1
+// @version      4.2.2
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -19,6 +19,7 @@
 
     let serverTimeOffsetMs = 0;
     let tempReservationsMap = null;
+	let tempReservationNo = null;
 
     const LOCAL_DEFAULT_VALUES = {
         'gys_local_env_resve_day': '15',
@@ -289,18 +290,18 @@
                 try { win.opener = null; } catch (e) {}
                 saveSessionData('gys_session_quick_close_tab', 'true');
 
-                const handleRefundAutoClick = () => {
-                    let tries = 0;
-                    const timer = setInterval(() => {
-                        const refundBtn = document.getElementById('refundBtn');
-                        if (refundBtn) {
-                            clearInterval(timer);
-                            refundBtn.click();
-                        } else if (++tries > 25) {
-                            clearInterval(timer);
-                        }
-                    }, 200);
-                };
+				const handleRefundAutoClick = () => {
+					let tries = 0;
+					const timer = setInterval(() => {
+						const refundForm = document.getElementById('refundForm');
+						if (refundForm) {
+							clearInterval(timer);
+							refundForm.submit();
+						} else if (++tries > 25) {
+							clearInterval(timer);
+						}
+					}, 200);
+				};
                 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', handleRefundAutoClick);
                 else handleRefundAutoClick();
             }
@@ -497,7 +498,7 @@
                         if (tempReservationsMap.type === 'assign') {
                             reservationsMap[tempReservationsMap.resve_date] = {
                                 type: 'manual',
-                                data: { time_name: tempReservationsMap.time_name }
+                                data: { time_name: tempReservationsMap.time_name, use_date: tempReservationsMap.use_date, entr_res_idx: tempReservationsMap.r_num }
                             };
                         } else {
                             delete reservationsMap[tempReservationsMap.resve_date];
@@ -583,7 +584,7 @@
                 cursor: 'pointer',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', boxSizing: 'border-box'
             });
-            
+
             let armed = !guardUntilRelease;
             if (guardUntilRelease) {
                 const arm = () => setTimeout(() => { armed = true; }, 400);
@@ -591,7 +592,7 @@
                     document.addEventListener(t, arm, { once: true, capture: true }));
                 setTimeout(() => { armed = true; }, 3000);
             }
-            
+
             mainBtn.onclick = () => {
                 if (!armed) return;
                 overlay.remove();
@@ -676,10 +677,11 @@
                 }
 
                 const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
-                
+
                 if (isAutoLink) {
                     window.location.href = targetUrl + '&from_panel=true';
                 } else {
+					tempReservationNo = data.r_num;
                     showCustomActionModal(
                         '결제 진행',
                         '예약이 완료되었습니다.\n지금 바로 결제를 진행하시겠습니까?',
@@ -687,6 +689,7 @@
                         '#2b6cb0',
                         () => {
                             openUrlInNewTab(targetUrl);
+							
                             resolve(true);
                         },
                         () => {
@@ -734,7 +737,7 @@
                 }
 
                 clockContainerEl.style.background = `linear-gradient(to right, #e2e8f0 ${(now.getMilliseconds() / 1000) * 100}%, #ffffff 0%)`;
-                
+
                 requestAnimationFrame(renderClockAndGauge);
             };
             requestAnimationFrame(renderClockAndGauge);
@@ -1110,7 +1113,7 @@
                 if (Array.isArray(timeData) && timeData.length > 0) {
                     timeData.forEach(item => {
                         const option = document.createElement('option');
-                        option.value = item.seq; option.textContent = `${item.time_nm} | ${item.timep}`;
+                        option.value = item.seq; option.textContent = `(${item.time_nm}) ${item.timep}`;
                         if (String(item.seq) === String(currentVal)) option.selected = true;
                         fragment.appendChild(option);
                     });
@@ -1280,22 +1283,18 @@
                             const reservationsMap = getLocalReservationsMap();
                             const resObj = reservationsMap[formattedResveDate];
 
-                            if (!resObj || resObj.type !== 'server' || !resObj.data) {
+                            if (!resObj || !resObj.data) {
                                 return;
                             }
                             isLongPress = true;
 
                             const d = resObj.data;
-                            const slipNo = d.slip_no || '';
-                            const comcd = d.comcd || 'GYS10';
-                            const resveNo = d.entr_res_idx || '';
-                            const requestNo = d.req_no !== undefined ? d.req_no : 0;
-                            const timeIdx = d.res_time_idx || 1;
+                            const resveNo = d.entr_res_idx;
                             const useDate = d.use_date || '';
                             const timeName = d.time_name || '';
 
-                            if (!resveNo || !slipNo) {
-                                alert('환불에 필요한 상세 예약 번호가 누락되었습니다.');
+                            if (!resveNo) {
+                                alert('환불에 필요한 예약 번호가 누락되었습니다.');
                                 return;
                             }
 
@@ -1305,13 +1304,14 @@
                                 '환불 신청하기',
                                 '#c53030',
                                 () => {
-                                    const refundUrl = `/fmcs/122?slip_no=${slipNo}&comcd=${comcd}&resve_no=${resveNo}&request_no=${requestNo}&action=refund&time_idx=${timeIdx}`;
+                                    const refundUrl = `/fmcs/122?comcd=GYS10&resve_no=${resveNo}&action=refund`;
                                     openUrlInNewTab(refundUrl);
 
                                     tempReservationsMap = {
                                         'type': 'delete',
                                         'resve_date': useDate.replace(/-/g, ''),
-                                        'time_name': timeName
+                                        'time_name': timeName,
+										'r_num': resveNo
                                     };
                                 },
                                 () => {},
@@ -1380,7 +1380,9 @@
                             tempReservationsMap = {
                                 'type': 'assign',
                                 'resve_date': formattedResveDate,
-                                'time_name': selectedTimeText
+								'use_date': rawDate,
+                                'time_name': selectedTimeText,
+								'r_num': tempReservationNo
                             };
                         } else {
                             dateBtn.style.backgroundColor = '#f8d7da';
@@ -1407,7 +1409,7 @@
 
                 renderReservationStatusMap();
                 scrollToPanelTop();
-                
+
                 if (firstWorkDateHyphen) {
                     updateAllOptions(firstWorkDateHyphen, false);
                 }
@@ -1437,7 +1439,7 @@
             document.getElementById('gys-next-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), 1)); loadDateList(); });
 
             await loadDateList();
-            
+
             if (isTargetDay) {
                 initRealtimeClock();
             } else {

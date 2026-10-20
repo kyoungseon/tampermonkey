@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace    http://tampermonkey.net/
-// @version      4.2.3
+// @version      4.2.4
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -238,23 +238,24 @@
 
     if (actionParam) {
         const isQuickCloseTab = isFromPanelParam || loadSessionData('gys_session_quick_close_tab') === 'true';
-        if (actionParam === 'paymentResult') {
-			saveLocalData('gys_local_change_resve', 'true');
+		if (actionParam === 'paymentResult') {
+            saveLocalData('gys_local_change_resve', 'true');
             if (isQuickCloseTab) {
-				
-				// 1. 서버가 보내는 자동 이동 스크립트(location.href 등)를 즉시 무력화
                 try {
-                    window.stop(); // 현재 진행 중인 로딩/네비게이션 즉시 중단
+                    window.stop();
+                    window.stop();
                 } catch (e) {}
 
-                // 2. 비동기 load 이벤트 기다릴 필요 없이 즉시 처리
-                try { window.opener = null; } catch (e) {}
-                
-                // 알림창이 브라우저 스레드를 막으면서 자연스럽게 뒤쪽의 location.href 실행을 완전히 차단함
-                alert("🎉빠른닫기🎉 예약이 정상 처리되었습니다!");
-                window.close();
-			}
-			
+                try { win.opener = null; } catch (e) {}
+
+                // 서버가 alert을 호출하는 타이밍을 가로채서 
+                // 우리의 메시지로 띄우고 곧바로 창 닫기
+                const originalAlert = win.alert;
+                win.alert = function(msg) {
+                    originalAlert("🎉빠른닫기🎉 예약이 정상 처리되었습니다!");
+                    window.close();
+                };
+            }
             return;
         }
         if (actionParam === 'reg_read') {

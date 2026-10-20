@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name       고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace    http://tampermonkey.net/
-// @version      4.2.4
+// @version      4.2.5
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author       SS2225
 // @match        https://yeyak.gys.or.kr/fmcs/102
@@ -1292,7 +1292,7 @@
                         }
 
                         const resObj0 = getLocalReservationsMap()[formattedResveDate];
-                        const canRefund = !!(resObj0 && resObj0.type === 'server' && resObj0.data);
+                        const canRefund = !!(resObj0 && resObj0.data);
                         if (canRefund) {
                             dateBtn.style.transition = 'background-color 0.7s linear';
                             dateBtn.style.backgroundColor = '#c53030';

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     4.1.11
+// @version     4.1.15
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -24,7 +24,8 @@
         'gys_local_env_resve_day': '15',
         'gys_local_env_resve_time_seq': '',
         'gys_local_env_program_cd': 'I000221',
-        'gys_local_env_mem_nm': '-'
+        'gys_local_env_mem_nm': '-',
+        'gys_local_env_use_confirm_popup': 'true'
     };
 
     const loadLocalData = (key) => {
@@ -533,6 +534,38 @@
             document.body.appendChild(form); form.submit(); document.body.removeChild(form);
         }
 
+        function showLoadingOverlay(message = "예약 요청 중입니다...") {
+            let overlay = document.getElementById('gys-loading-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'gys-loading-overlay';
+                Object.assign(overlay.style, {
+                    position: 'fixed', left: '0', top: '0', width: '100%', height: '100%',
+                    backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: '999999',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    fontFamily: 'Malgun Gothic, sans-serif'
+                });
+                overlay.innerHTML = `
+                    <div style="background: #ffffff; padding: 22px 30px; border-radius: 8px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); display: flex; flex-direction: column; align-items: center; gap: 12px; border: 2px solid #274081;">
+                        <div style="width: 36px; height: 36px; border: 4px solid #e2e8f0; border-top: 4px solid #274081; border-radius: 50%; animation: gys-spin 0.8s linear infinite;"></div>
+                        <div id="gys-loading-text" style="font-size: 14px; font-weight: bold; color: #274081;">${message}</div>
+                    </div>
+                    <style>
+                        @keyframes gys-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+                    </style>
+                `;
+                document.body.appendChild(overlay);
+            } else {
+                document.getElementById('gys-loading-text').textContent = message;
+                overlay.style.display = 'flex';
+            }
+        }
+
+        function hideLoadingOverlay() {
+            const overlay = document.getElementById('gys-loading-overlay');
+            if (overlay) overlay.style.display = 'none';
+        }
+
         function custom_set_ticket_resve(resve_date, time_seq, program_code, isAutoLink = false) {
             return new Promise(async (resolve) => {
                 if (!win.ISLOGIN) {
@@ -542,30 +575,47 @@
                     return;
                 }
 
+                const reservationsMap = getLocalReservationsMap();
+                if (reservationsMap[resve_date]) {
+                    alert('이미 예약되어 있는 날짜입니다.\n\n취소(환불)를 원하시면 캘린더의 해당 날짜를 길게 누르(롱프레스)여 처리해주세요.');
+                    resolve(false);
+                    return;
+                }
+
+                showLoadingOverlay("⏳ 서버에 예약 요청 중...");
+
                 const targetApiUrl = `/rest/dailyuse/set_ticket_resve?company_code=GYS10&program_code=${program_code || "I000221"}&part_code=03&resve_date=${resve_date}&time_seq=${time_seq}&mem_no=${win.MEM_NO}&user_cnt=1&_=` + Date.now();
 
-                const handleResponseData = (data) => {
-                    if (!data || data.result_code != 0) {
-                        alert(data?.result_message || '예약에 실패했습니다.');
-                        resolve(false);
-                        return;
-                    }
-                    const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
-                    if (isAutoLink) {
-                        window.location.href = targetUrl + '&from_panel=true';
-                    } else {
-                        openUrlInNewTab(targetUrl);
-                    }
-                    resolve(true);
-                };
-
                 const data = await fetchWithServerTime(targetApiUrl, 'json');
-                if (data) {
-                    handleResponseData(data);
-                } else {
-                    alert('예약 요청 중 오류가 발생했습니다.');
+                hideLoadingOverlay();
+
+                if (!data || data.result_code != 0) {
+                    alert(data?.result_message || '예약에 실패했습니다.');
                     resolve(false);
+                    return;
                 }
+
+                const targetUrl = `/fmcs/102?action=write&comcd=GYS10&resve_no=${data.r_num}`;
+                if (isAutoLink) {
+                    window.location.href = targetUrl + '&from_panel=true';
+                } else {
+                    const useConfirmPopup = loadLocalData('gys_local_env_use_confirm_popup') !== 'false';
+                    if (useConfirmPopup) {
+                        if (!confirm(`[${formatMMDD(resve_date)}] 날짜로 예약을 진행하시겠습니까?`)) {
+                            resolve(false);
+                            if (data.r_num) {
+                                fetch(`/fmcs/102?comcd=GYS10&resve_no=${data.r_num}&action=cancel`, { credentials: 'include' })
+                                    .then(res => {
+                                        if (!res.ok) alert('예약 취소 처리에 실패했습니다.');
+                                    })
+                                    .catch(() => alert('예약 취소 요청 중 오류가 발생했습니다.'));
+                            }
+                            return;
+                        }
+                    }
+                    openUrlInNewTab(targetUrl);
+                }
+                resolve(true);
             });
         }
 
@@ -681,7 +731,8 @@
                 dayOptionsHtml += `<option value="${ddStr}" ${ddStr === settingResveDay ? 'selected' : ''}>매월 ${ddStr}일</option>`;
             }
 
-            // 설정 모달창 (그리드 형태의 계정 관리 목록 포함)
+            const currentUseConfirmPopup = loadLocalData('gys_local_env_use_confirm_popup') !== 'false';
+
             const popupOverlay = document.createElement('div');
             popupOverlay.id = 'gys-smartphone-modal-overlay';
             Object.assign(popupOverlay.style, {
@@ -692,32 +743,33 @@
             });
 
             popupOverlay.innerHTML = `
-                <div style="background-color: #f8f9fa; width: 320px; height: 420px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
+                <div style="background-color: #f8f9fa; width: 320px; height: 440px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
                         <span style="font-size: 13px; font-weight: bold;">설정 및 계정 관리</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                     </div>
                     <div style="background-color: #ffffff; padding: 14px; flex: 1; overflow-y: auto; box-sizing: border-box;">
-                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
+                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
                             <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약일 설정</label>
-                            <select id="gys-setting-resve-day-select" style="width: 150px; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
+                            <select id="gys-setting-resve-day-select" style="width: 140px; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
                                 ${dayOptionsHtml}
                             </select>
+                        </div>
+                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px;">
+                            <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약 확인 팝업 사용</label>
+                            <input type="checkbox" id="gys-setting-confirm-popup-check" ${currentUseConfirmPopup ? 'checked' : ''} style="width: 18px; height: 18px; cursor: pointer;">
                         </div>
                         <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 10px 0;">
                         <div>
                             <div style="font-size: 12px; font-weight: bold; color: #274081; margin-bottom: 6px;">📋 저장된 계정 목록 관리</div>
                             <div style="font-size: 10.5px; color: #666666; margin-bottom: 8px;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
-                            <!-- 그리드 테이블 구조 -->
                             <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff;">
                                 <div style="display: grid; grid-template-columns: 110px 1fr 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0;">
                                     <div>멤버번호</div>
                                     <div>멤버이름</div>
                                     <div>관리</div>
                                 </div>
-                                <div id="gys-setting-user-grid-body" style="max-height: 150px; overflow-y: auto;">
-                                    <!-- 동적 그리드 행 렌더링 -->
-                                </div>
+                                <div id="gys-setting-user-grid-body" style="max-height: 130px; overflow-y: auto;"></div>
                             </div>
                         </div>
                     </div>
@@ -725,7 +777,6 @@
             `;
             panel.appendChild(popupOverlay);
 
-            // 최초 패널 생성 시 이름이 미등록인 경우 띄울 팝업
             const firstRegOverlay = document.createElement('div');
             firstRegOverlay.id = 'gys-first-reg-modal-overlay';
             Object.assign(firstRegOverlay.style, {
@@ -825,7 +876,6 @@
                 });
                 gridBody.innerHTML = html;
 
-                // 입력 필드 수정 시 실시간 로컬 스토리지 반영
                 gridBody.querySelectorAll('.gys-grid-name-input').forEach(input => {
                     input.addEventListener('input', (e) => {
                         const targetNo = input.dataset.memno;
@@ -840,7 +890,6 @@
                     });
                 });
 
-                // 삭제 버튼 이벤트
                 gridBody.querySelectorAll('.gys-grid-del-btn').forEach(btn => {
                     btn.addEventListener('click', (e) => {
                         e.stopPropagation();
@@ -929,6 +978,13 @@
                 });
             }
 
+            const confirmPopupCheckEl = document.getElementById('gys-setting-confirm-popup-check');
+            if (confirmPopupCheckEl) {
+                confirmPopupCheckEl.addEventListener('change', function() {
+                    saveLocalData('gys_local_env_use_confirm_popup', this.checked ? 'true' : 'false');
+                });
+            }
+
             document.getElementById('gys-capture-btn').addEventListener('click', () => {
                 capturePanelToPng();
             });
@@ -939,7 +995,9 @@
                     return;
                 }
 
+                showLoadingOverlay("🔄 예약현황 조회 중...");
                 await refreshUserReservationsAsync();
+                hideLoadingOverlay();
                 alert('예약현황이 조회되었습니다.');
             });
 
@@ -1290,12 +1348,12 @@
             document.getElementById('gys-next-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), 1)); loadDateList(); });
 
             await loadDateList();
-			
+            
             if (isTargetDay) {
                 initRealtimeClock();
             } else {
-				refreshUserReservationsAsync();
-			}
+                refreshUserReservationsAsync();
+            }
         }
 
         window.addEventListener('load', async () => {

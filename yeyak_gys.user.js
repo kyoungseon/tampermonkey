@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.3
+// @version     5.1.4
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -1403,9 +1403,31 @@
                             selectedProgramCode = programSelectEl.value;
                         }
 
-                        const selectedTimeText = timeSelectEl.options[timeSelectEl.selectedIndex]?.textContent || '';
+                        const selectedTimeOption = timeSelectEl.options[timeSelectEl.selectedIndex];
+                        const selectedTimeText = selectedTimeOption ? selectedTimeOption.textContent : '';
 
                         if (!selectedTimeSeq || !selectedProgramCode) { alert('시간대/상품이 선택되지 않았습니다.'); return; }
+
+                        // [추가된 로직] 오늘 날짜인 경우 선택된 시간대의 시작 시간과 현재 시간 비교
+                        if (formattedResveDate === getTodayYMD() && selectedTimeText) {
+                            const parsedTime = parseTimeTo4Lines(selectedTimeText);
+                            if (parsedTime && parsedTime.startTime) {
+                                const [startHour, startMin] = parsedTime.startTime.split(':').map(Number);
+                                if (!isNaN(startHour) && !isNaN(startMin)) {
+                                    const nowServer = new Date(Date.now() + serverTimeOffsetMs);
+                                    const currentHour = nowServer.getHours();
+                                    const currentMin = nowServer.getMinutes();
+
+                                    const startTimeTotalMin = startHour * 60 + startMin;
+                                    const currentTimeTotalMin = currentHour * 60 + currentMin;
+
+                                    if (startTimeTotalMin <= currentTimeTotalMin) {
+                                        alert(`선택하신 시간대(${parsedTime.startTime})는 이미 지나서 예약할 수 없습니다.`);
+                                        return;
+                                    }
+                                }
+                            }
+                        }
 
                         dateBtn.disabled = true;
                         if (await custom_set_ticket_resve(formattedResveDate, selectedTimeSeq, selectedProgramCode, false)) {

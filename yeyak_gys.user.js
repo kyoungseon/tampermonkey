@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.5
+// @version     5.1.6
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -607,7 +607,7 @@
 
             let armed = !guardUntilRelease;
             if (guardUntilRelease) {
-                const arm = () => setTimeout(() => { armed = true; }, 400);
+                const arm = () => setTimeout(() => { armed = true; }, 200);
                 ['touchend', 'touchcancel', 'mouseup'].forEach(t =>
                     document.addEventListener(t, arm, { once: true, capture: true }));
                 setTimeout(() => { armed = true; }, 3000);
@@ -1036,39 +1036,6 @@
                         saveEnvTimeSeqForYM(currentYM, this.value);
                     }
                 });
-
-                let timePressTimer = null;
-                const START_LONG_PRESS_TIME = 700;
-
-                const startTimeLongPress = () => {
-                    timePressTimer = setTimeout(() => {
-                        const options = timeSelectEl.options;
-                        if (!options || options.length === 0) {
-                            alert("조회된 시간대 옵션이 없습니다.");
-                            return;
-                        }
-                        let resultList = [];
-                        for (let i = 0; i < options.length; i++) {
-                            const opt = options[i];
-                            resultList.push(`value: ${opt.value} | text: ${opt.text}`);
-                        }
-                        alert(`[시간대 콤보박스 옵션 전체 목록]\n\n` + resultList.join('\n'));
-                    }, START_LONG_PRESS_TIME);
-                };
-
-                const cancelTimeLongPress = () => {
-                    if (timePressTimer) {
-                        clearTimeout(timePressTimer);
-                        timePressTimer = null;
-                    }
-                };
-
-                timeSelectEl.addEventListener('mousedown', startTimeLongPress);
-                timeSelectEl.addEventListener('mouseup', cancelTimeLongPress);
-                timeSelectEl.addEventListener('mouseleave', cancelTimeLongPress);
-                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: true });
-                timeSelectEl.addEventListener('touchend', cancelTimeLongPress);
-                timeSelectEl.addEventListener('touchcancel', cancelTimeLongPress);
             }
 
             const programSelectEl = document.getElementById('gys-program-select');
@@ -1408,7 +1375,6 @@
 
                         if (!selectedTimeSeq || !selectedProgramCode) { alert('시간대/상품이 선택되지 않았습니다.'); return; }
 
-                        // [추가된 로직] 오늘 날짜인 경우 선택된 시간대의 시작 시간과 현재 시간 비교
                         if (formattedResveDate === getTodayYMD() && selectedTimeText) {
                             const parsedTime = parseTimeTo4Lines(selectedTimeText);
                             if (parsedTime && parsedTime.startTime) {

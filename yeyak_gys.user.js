@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     4.2.10
+// @version     5.1.1
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -23,7 +23,6 @@
 
     const LOCAL_DEFAULT_VALUES = {
         'gys_local_env_resve_day': '15',
-        'gys_local_env_resve_time_seq': '',
         'gys_local_env_program_cd': 'I000221',
         'gys_local_env_mem_nm': '-'
     };
@@ -41,9 +40,36 @@
     const saveLocalData = (key, val) => { try { win.localStorage.setItem(key, val); } catch (e) {} };
     const removeLocalData = (key) => { try { win.localStorage.removeItem(key); } catch (e) {} };
 
+    removeLocalData('gys_local_env_resve_time_seq');
+    removeLocalData('gys_local_env_use_confirm_popup');
+
     const loadSessionData = (key) => { try { return win.sessionStorage.getItem(key); } catch (e) { return null; } };
     const saveSessionData = (key, val) => { try { win.sessionStorage.setItem(key, val); } catch (e) {} };
     const removeSessionData = (key) => { try { win.sessionStorage.removeItem(key); } catch (e) {} };
+
+    const getEnvTimeSeqMap = () => {
+        try {
+            const jsonStr = loadLocalData('gys_local_env_resve_time_seq_map');
+            if (!jsonStr) return {};
+            const parsed = JSON.parse(jsonStr);
+            return (typeof parsed === 'object' && parsed !== null) ? parsed : {};
+        } catch (e) { return {}; }
+    };
+
+    const saveEnvTimeSeqForYM = (ym, seq) => {
+        if (!ym || !seq) return;
+        try {
+            const mapObj = getEnvTimeSeqMap();
+            mapObj[ym] = seq;
+            saveLocalData('gys_local_env_resve_time_seq_map', JSON.stringify(mapObj));
+        } catch (e) {}
+    };
+
+    const getEnvTimeSeqForYM = (ym) => {
+        if (!ym) return '';
+        const mapObj = getEnvTimeSeqMap();
+        return mapObj[ym] || '';
+    };
 
     function getLocalReservationsMap() {
         const jsonStr = loadLocalData('gys_local_reservations_map');
@@ -742,12 +768,7 @@
             const style = document.createElement('style');
             style.id = 'gys-responsive-style';
             style.textContent = `
-                #gys-custom-panel, #gys-custom-panel * {
-                    -webkit-touch-callout: none !important;
-                    -webkit-user-select: none !important;
-                    user-select: none !important;
-                }
-                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; }
+                #gys-custom-panel { position: relative !important; margin: 12px 0 130px 0 !important; width: 100% !important; max-width: 100% !important; box-sizing: border-box !important; -webkit-user-select: none; user-select: none; }
                 .gys-dynamic-date-btn, #gys-custom-panel button, #gys-custom-panel select { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
                 div[class*="chatbot"], div[id*="chatbot"], div[class*="happyment"], div[id*="happyment"], iframe[src*="chatbot"] { display: none !important; opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }
                 @media (min-width: 769px) {
@@ -839,29 +860,47 @@
             });
 
             popupOverlay.innerHTML = `
-                <div style="background-color: #f8f9fa; width: 320px; height: 380px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
+                <div style="background-color: #f8f9fa; width: 340px; height: 410px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
-                        <span style="font-size: 13px; font-weight: bold;">설정 및 계정 관리</span>
+                        <span style="font-size: 13px; font-weight: bold;">설정 및 관리</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
                     </div>
-                    <div style="background-color: #ffffff; padding: 14px; flex: 1; overflow-y: auto; box-sizing: border-box;">
-                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px;">
+                    <div style="background-color: #ffffff; padding: 14px; flex: 1; overflow-y: auto; box-sizing: border-box; display: flex; flex-direction: column;">
+                        <div style="display: flex; flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 12px; flex-shrink: 0;">
                             <label style="font-size: 12px; font-weight: bold; color: #333333; white-space: nowrap;">예약일 설정</label>
                             <select id="gys-setting-resve-day-select" style="width: 140px; height: 32px; padding: 2px 4px; border: 1px solid #cccccc; border-radius: 4px; font-size: 12px; font-weight: bold; color: #333333; background-color: #ffffff;">
                                 ${dayOptionsHtml}
                             </select>
                         </div>
-                        <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 12px 0;">
-                        <div>
-                            <div style="font-size: 12px; font-weight: bold; color: #274081; margin-bottom: 6px;">📋 저장된 계정 목록 관리</div>
-                            <div style="font-size: 10.5px; color: #666666; margin-bottom: 8px;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
-                            <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff;">
-                                <div style="display: grid; grid-template-columns: 110px 1fr 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0;">
-                                    <div>멤버번호</div>
-                                    <div>멤버이름</div>
-                                    <div>관리</div>
+                        <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 4px 0 10px 0; flex-shrink: 0;">
+                        <div style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                            <div style="display: flex; gap: 4px; margin-bottom: 8px; flex-shrink: 0;">
+                                <button id="gys-tab-member-btn" style="flex: 1; height: 30px; background-color: #274081; color: #ffffff; border: none; border-radius: 4px 4px 0 0; font-size: 11.5px; font-weight: bold; cursor: pointer;">멤버</button>
+                                <button id="gys-tab-alarm-btn" style="flex: 1; height: 30px; background-color: #e2e8f0; color: #4a5568; border: none; border-radius: 4px 4px 0 0; font-size: 11.5px; font-weight: bold; cursor: pointer;">알림</button>
+                            </div>
+                            <div id="gys-tab-content-member" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                                <div style="font-size: 10.5px; color: #666666; margin-bottom: 6px; flex-shrink: 0;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
+                                <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                                    <div style="display: grid; grid-template-columns: 1fr 110px 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0; flex-shrink: 0;">
+                                        <div>멤버이름</div>
+                                        <div>멤버번호</div>
+                                        <div>관리</div>
+                                    </div>
+                                    <div id="gys-setting-user-grid-body" style="overflow-y: auto; flex: 1;"></div>
                                 </div>
-                                <div id="gys-setting-user-grid-body" style="max-height: 130px; overflow-y: auto;"></div>
+                            </div>
+                            <div id="gys-tab-content-alarm" style="display: none; flex-direction: column; flex: 1; min-height: 0;">
+                                <div style="font-size: 10.5px; color: #666666; margin-bottom: 6px; flex-shrink: 0;">알림 설정 관리 영역입니다.</div>
+                                <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                                    <div style="display: grid; grid-template-columns: 80px 1fr 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0; flex-shrink: 0;">
+                                        <div>날짜</div>
+                                        <div>시간대</div>
+                                        <div>관리</div>
+                                    </div>
+                                    <div id="gys-setting-alarm-grid-body" style="overflow-y: auto; flex: 1;">
+                                        <div style="font-size: 11px; color: #888; text-align: center; padding: 20px 0;">등록된 알림이 없습니다.</div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -932,6 +971,29 @@
                 alert(`[${inputName}] 계정이 등록되었습니다.`);
             });
 
+            const tabMemberBtn = document.getElementById('gys-tab-member-btn');
+            const tabAlarmBtn = document.getElementById('gys-tab-alarm-btn');
+            const tabContentMember = document.getElementById('gys-tab-content-member');
+            const tabContentAlarm = document.getElementById('gys-tab-content-alarm');
+
+            tabMemberBtn.addEventListener('click', () => {
+                tabMemberBtn.style.backgroundColor = '#274081';
+                tabMemberBtn.style.color = '#ffffff';
+                tabAlarmBtn.style.backgroundColor = '#e2e8f0';
+                tabAlarmBtn.style.color = '#4a5568';
+                tabContentMember.style.display = 'flex';
+                tabContentAlarm.style.display = 'none';
+            });
+
+            tabAlarmBtn.addEventListener('click', () => {
+                tabAlarmBtn.style.backgroundColor = '#274081';
+                tabAlarmBtn.style.color = '#ffffff';
+                tabMemberBtn.style.backgroundColor = '#e2e8f0';
+                tabMemberBtn.style.color = '#4a5568';
+                tabContentAlarm.style.display = 'flex';
+                tabContentMember.style.display = 'none';
+            });
+
             function renderSettingsUserGrid() {
                 const gridBody = document.getElementById('gys-setting-user-grid-body');
                 if (!gridBody) return;
@@ -947,19 +1009,26 @@
 
                 const keys = Object.keys(namesMap);
                 if (keys.length === 0) {
-                    gridBody.innerHTML = '<div style="font-size: 11px; color: #888; text-align: center; padding: 12px 0;">등록된 계정이 없습니다.</div>';
+                    gridBody.innerHTML = '<div style="font-size: 11px; color: #888; text-align: center; padding: 20px 0;">등록된 계정이 없습니다.</div>';
                     return;
                 }
+
+                // 멤버이름 기준 오름차순 정렬
+                keys.sort((a, b) => {
+                    const nameA = (namesMap[a] || '').toLowerCase();
+                    const nameB = (namesMap[b] || '').toLowerCase();
+                    return nameA.localeCompare(nameB, 'ko');
+                });
 
                 let html = '';
                 keys.forEach(no => {
                     const name = namesMap[no];
                     html += `
-                        <div style="display: grid; grid-template-columns: 110px 1fr 50px; border-bottom: 1px solid #f1f5f9; align-items: center; font-size: 11px; text-align: center; padding: 4px 0;">
-                            <div style="color: #333; font-family: monospace; font-weight: bold; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">${no}</div>
+                        <div style="display: grid; grid-template-columns: 1fr 110px 50px; border-bottom: 1px solid #f1f5f9; align-items: center; font-size: 11px; text-align: center; padding: 4px 0;">
                             <div style="padding: 0 2px;">
                                 <input type="text" class="gys-grid-name-input" data-memno="${no}" value="${name}" style="width: 100%; height: 26px; padding: 0 4px; border: 1px solid #d1d5db; border-radius: 3px; font-size: 11px; text-align: center; box-sizing: border-box; background: #fff;">
                             </div>
+                            <div style="color: #333; font-family: monospace; font-weight: bold; overflow: hidden; text-overflow: ellipsis; padding: 0 2px;">${no}</div>
                             <div style="padding: 0 2px;">
                                 <button class="gys-grid-del-btn" data-memno="${no}" style="background: #ef4444; color: #fff; border: none; border-radius: 3px; font-size: 10px; padding: 3px 6px; cursor: pointer; font-weight: bold;">삭제</button>
                             </div>
@@ -1001,14 +1070,17 @@
             const timeSelectEl = document.getElementById('gys-time-select');
             if (timeSelectEl) {
                 timeSelectEl.addEventListener('change', function() {
-                    if (this.value) saveLocalData('gys_local_env_resve_time_seq', this.value);
+                    if (this.value) {
+                        const ymBtn = document.getElementById('gys-ym-reload-btn');
+                        const currentYM = ymBtn ? parseYMFromDot(ymBtn.textContent.trim()) : getCurrentYM();
+                        saveEnvTimeSeqForYM(currentYM, this.value);
+                    }
                 });
 
                 let timePressTimer = null;
                 const START_LONG_PRESS_TIME = 700;
 
-                const startTimeLongPress = (e) => {
-                    if (e.cancelable) e.preventDefault();
+                const startTimeLongPress = () => {
                     timePressTimer = setTimeout(() => {
                         const options = timeSelectEl.options;
                         if (!options || options.length === 0) {
@@ -1034,7 +1106,7 @@
                 timeSelectEl.addEventListener('mousedown', startTimeLongPress);
                 timeSelectEl.addEventListener('mouseup', cancelTimeLongPress);
                 timeSelectEl.addEventListener('mouseleave', cancelTimeLongPress);
-                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: false });
+                timeSelectEl.addEventListener('touchstart', startTimeLongPress, { passive: true });
                 timeSelectEl.addEventListener('touchend', cancelTimeLongPress);
                 timeSelectEl.addEventListener('touchcancel', cancelTimeLongPress);
             }
@@ -1106,7 +1178,9 @@
             async function updateTimeSelectOptions(targetDate) {
                 const selectEl = document.getElementById('gys-time-select');
                 if (!selectEl) return;
-                const currentVal = selectEl.value || loadLocalData('gys_local_env_resve_time_seq');
+                
+                const targetYM = getValidTargetDate(targetDate).substring(0, 6);
+                const currentVal = getEnvTimeSeqForYM(targetYM);
                 const timeData = await fetchTimeSlots(targetDate);
 
                 const fragment = document.createDocumentFragment();
@@ -1196,6 +1270,7 @@
 
                     if (hasClose || stateCd === '30') {
                         statusText = hasClose ? item.close_advice.trim() : (stateNm || '휴관일');
+						if(statusText === '정기휴관일') statusText = '휴관일';
                         statusColor = '#d9534f';
                         isDisabled = true;
                         isClosedDay = true;
@@ -1251,9 +1326,6 @@
                         transition: 'all 0.15s'
                     });
 
-                    dateBtn.onmouseover = () => { if (!dateBtn.disabled && formattedResveDate >= getTodayYMD()) dateBtn.style.backgroundColor = '#e8f4ff'; };
-                    dateBtn.onmouseout = () => { if (!dateBtn.disabled) dateBtn.style.backgroundColor = isClosedDay ? '#f8f9fa' : '#ffffff'; };
-
                     let pressTimer = null;
                     let isLongPress = false;
                     let startX = 0, startY = 0;
@@ -1265,7 +1337,6 @@
                     };
 
                     const startLongPressCheck = (e) => {
-                        if (e.cancelable) e.preventDefault();
                         if (formattedResveDate < getTodayYMD()) return;
                         isLongPress = false;
                         if (e.touches && e.touches.length > 0) {
@@ -1343,7 +1414,7 @@
                     dateBtn.addEventListener('mousedown', startLongPressCheck);
                     dateBtn.addEventListener('mouseup', cancelLongPressCheck);
                     dateBtn.addEventListener('mouseleave', cancelLongPressCheck);
-                    dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: false });
+                    dateBtn.addEventListener('touchstart', startLongPressCheck, { passive: true });
                     dateBtn.addEventListener('touchmove', handleTouchMove, { passive: true });
                     dateBtn.addEventListener('touchend', cancelLongPressCheck);
                     dateBtn.addEventListener('touchcancel', cancelLongPressCheck);
@@ -1449,7 +1520,6 @@
         }
 
         window.addEventListener('load', async () => {
-            console.log('[DEBUG] window.load fired. Current MEM_NO:', win.MEM_NO, 'Type:', typeof win.MEM_NO);
 
             if (typeof win.MEM_NO === 'undefined') {
                 await new Promise(resolve => {
@@ -1465,8 +1535,6 @@
                         }
                     }, 100);
                 });
-            } else {
-                console.log('[DEBUG] MEM_NO was already defined upon load:', win.MEM_NO);
             }
 
             const timeSeq = urlParams.get('time_seq');

@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.4
+// @version     5.1.5
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -1462,11 +1462,11 @@
                 }
                 
                 renderReservationStatusMap();
+                scrollToPanelTop();
 
                 if (firstWorkDateHyphen) {
                     updateAllOptions(firstWorkDateHyphen, false);
                 }
-                
             }
 
             const ymBtn = document.getElementById('gys-ym-reload-btn');
@@ -1487,7 +1487,7 @@
             const baseDateBtn = document.getElementById('gys-base-date-btn');
             const baseDateInput = document.getElementById('gys-base-date-input');
             baseDateBtn.addEventListener('click', () => { if (typeof baseDateInput.showPicker === 'function') baseDateInput.showPicker(); else baseDateInput.click(); });
-            baseDateInput.addEventListener('change', function() { updateAllOptions(this.value, false); scrollToPanelTop(); });
+            baseDateInput.addEventListener('change', function() { updateAllOptions(this.value, false); });
 
             document.getElementById('gys-prev-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), -1)); loadDateList(); });
             document.getElementById('gys-next-month-btn').addEventListener('click', () => { ymBtn.textContent = formatYMWithDot(addMonthsToYM(parseYMFromDot(ymBtn.textContent.trim()), 1)); loadDateList(); });

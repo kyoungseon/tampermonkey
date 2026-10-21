@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V4
 // @namespace   http://tampermonkey.net/
-// @version     5.1.1
+// @version     5.1.2
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -860,7 +860,7 @@
             });
 
             popupOverlay.innerHTML = `
-                <div style="background-color: #f8f9fa; width: 340px; height: 410px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
+                <div style="background-color: #f8f9fa; width: 340px; height: 500px; border-radius: 0px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); border: 3px solid #333333; display: flex; flex-direction: column; overflow: hidden; box-sizing: border-box; position: relative;">
                     <div style="background-color: #333333; color: #ffffff; padding: 9px 14px; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 0px;">
                         <span style="font-size: 13px; font-weight: bold;">설정 및 관리</span>
                         <button id="gys-popup-close-btn" style="background: none; border: none; color: #ffffff; font-size: 16px; cursor: pointer; padding: 0; font-weight: bold;">✕</button>
@@ -874,33 +874,17 @@
                         </div>
                         <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 4px 0 10px 0; flex-shrink: 0;">
                         <div style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                            <div style="display: flex; gap: 4px; margin-bottom: 8px; flex-shrink: 0;">
-                                <button id="gys-tab-member-btn" style="flex: 1; height: 30px; background-color: #274081; color: #ffffff; border: none; border-radius: 4px 4px 0 0; font-size: 11.5px; font-weight: bold; cursor: pointer;">멤버</button>
-                                <button id="gys-tab-alarm-btn" style="flex: 1; height: 30px; background-color: #e2e8f0; color: #4a5568; border: none; border-radius: 4px 4px 0 0; font-size: 11.5px; font-weight: bold; cursor: pointer;">알림</button>
-                            </div>
-                            <div id="gys-tab-content-member" style="display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                                <div style="font-size: 10.5px; color: #666666; margin-bottom: 6px; flex-shrink: 0;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
-                                <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff; display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                                    <div style="display: grid; grid-template-columns: 1fr 110px 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0; flex-shrink: 0;">
-                                        <div>멤버이름</div>
-                                        <div>멤버번호</div>
-                                        <div>관리</div>
-                                    </div>
-                                    <div id="gys-setting-user-grid-body" style="overflow-y: auto; flex: 1;"></div>
+                            <div style="font-size: 10.5px; color: #666666; margin-bottom: 6px; flex-shrink: 0;">멤버이름을 클릭하여 직접 수정할 수 있습니다.</div>
+                            <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff; display: flex; flex-direction: column; flex: 1; min-height: 0;">
+                                <div style="display: grid; grid-template-columns: 1fr 110px 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0; flex-shrink: 0;">
+                                    <div>멤버이름</div>
+                                    <div>멤버번호</div>
+                                    <div>관리</div>
                                 </div>
+                                <div id="gys-setting-user-grid-body" style="overflow-y: auto; flex: 1;"></div>
                             </div>
-                            <div id="gys-tab-content-alarm" style="display: none; flex-direction: column; flex: 1; min-height: 0;">
-                                <div style="font-size: 10.5px; color: #666666; margin-bottom: 6px; flex-shrink: 0;">알림 설정 관리 영역입니다.</div>
-                                <div style="border: 1px solid #cccccc; border-radius: 4px; overflow: hidden; background: #ffffff; display: flex; flex-direction: column; flex: 1; min-height: 0;">
-                                    <div style="display: grid; grid-template-columns: 80px 1fr 50px; background-color: #f1f5f9; border-bottom: 1px solid #cccccc; font-size: 11px; font-weight: bold; color: #333333; text-align: center; padding: 5px 0; flex-shrink: 0;">
-                                        <div>날짜</div>
-                                        <div>시간대</div>
-                                        <div>관리</div>
-                                    </div>
-                                    <div id="gys-setting-alarm-grid-body" style="overflow-y: auto; flex: 1;">
-                                        <div style="font-size: 11px; color: #888; text-align: center; padding: 20px 0;">등록된 알림이 없습니다.</div>
-                                    </div>
-                                </div>
+                            <div style="margin-top: 10px; flex-shrink: 0;">
+                                <a href="https://my-checker-8fj5.onrender.com/" target="_blank" rel="noopener" style="display: block; width: 100%; height: 38px; background-color: #274081; color: #ffffff; text-align: center; line-height: 38px; border-radius: 4px; font-size: 12px; font-weight: bold; text-decoration: none; box-sizing: border-box;">성저파크골프 빈자리 알림 서비스</a>
                             </div>
                         </div>
                     </div>
@@ -971,29 +955,6 @@
                 alert(`[${inputName}] 계정이 등록되었습니다.`);
             });
 
-            const tabMemberBtn = document.getElementById('gys-tab-member-btn');
-            const tabAlarmBtn = document.getElementById('gys-tab-alarm-btn');
-            const tabContentMember = document.getElementById('gys-tab-content-member');
-            const tabContentAlarm = document.getElementById('gys-tab-content-alarm');
-
-            tabMemberBtn.addEventListener('click', () => {
-                tabMemberBtn.style.backgroundColor = '#274081';
-                tabMemberBtn.style.color = '#ffffff';
-                tabAlarmBtn.style.backgroundColor = '#e2e8f0';
-                tabAlarmBtn.style.color = '#4a5568';
-                tabContentMember.style.display = 'flex';
-                tabContentAlarm.style.display = 'none';
-            });
-
-            tabAlarmBtn.addEventListener('click', () => {
-                tabAlarmBtn.style.backgroundColor = '#274081';
-                tabAlarmBtn.style.color = '#ffffff';
-                tabMemberBtn.style.backgroundColor = '#e2e8f0';
-                tabMemberBtn.style.color = '#4a5568';
-                tabContentAlarm.style.display = 'flex';
-                tabContentMember.style.display = 'none';
-            });
-
             function renderSettingsUserGrid() {
                 const gridBody = document.getElementById('gys-setting-user-grid-body');
                 if (!gridBody) return;
@@ -1013,7 +974,6 @@
                     return;
                 }
 
-                // 멤버이름 기준 오름차순 정렬
                 keys.sort((a, b) => {
                     const nameA = (namesMap[a] || '').toLowerCase();
                     const nameB = (namesMap[b] || '').toLowerCase();
@@ -1270,7 +1230,7 @@
 
                     if (hasClose || stateCd === '30') {
                         statusText = hasClose ? item.close_advice.trim() : (stateNm || '휴관일');
-						if(statusText === '정기휴관일') statusText = '휴관일';
+                        if(statusText === '정기휴관일') statusText = '휴관일';
                         statusColor = '#d9534f';
                         isDisabled = true;
                         isClosedDay = true;
@@ -1478,13 +1438,13 @@
                     });
                     btnContainer.appendChild(nextBtn);
                 }
-
+                
                 renderReservationStatusMap();
-                scrollToPanelTop();
 
                 if (firstWorkDateHyphen) {
                     updateAllOptions(firstWorkDateHyphen, false);
                 }
+                
             }
 
             const ymBtn = document.getElementById('gys-ym-reload-btn');

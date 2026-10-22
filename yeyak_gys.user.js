@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.6
+// @version     5.1.7
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -735,10 +735,22 @@
             }
         }
 
-        function scrollToPanelTop() {
-            const panel = document.getElementById('gys-custom-panel');
-            if (panel) window.scrollTo({ top: Math.max(0, window.pageYOffset + panel.getBoundingClientRect().top - 7), behavior: 'smooth' });
-        }
+		function scrollToPanelTop() {
+			const panel = document.getElementById('gys-custom-panel');
+			if (!panel) return;
+
+			let count = 0;
+			const interval = setInterval(() => {
+				const targetTop = window.pageYOffset + panel.getBoundingClientRect().top - 7;
+				window.scrollTo({ top: Math.max(0, targetTop), behavior: 'instant' });
+				
+				count++;
+				// 3번 정도 반복하거나, 위치가 더 이상 안 바뀌면 멈추도록 설정 가능
+				if (count >= 3) {
+					clearInterval(interval);
+				}
+			}, 200); // 0.2초 간격으로 총 3회 보정
+		}
 
         function initRealtimeClock() {
             const clockEl = document.getElementById('gys-realtime-clock');
@@ -837,7 +849,7 @@
                     </div>
                 </div>
                 <hr style="border: 0; border-top: 1px solid #e0e0e0; margin: 8px 0;">
-                <div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box;">
+                <div id="gys-calendar-wrapper" style="width: 100%; box-sizing: border-box; min-height: 360px;">
                     <div style="display: grid; grid-template-columns: repeat(7, minmax(42px, 1fr)); gap: 1px; text-align: center; font-weight: bold; font-size: 12.5px; margin-bottom: 4px; background-color: #F0F0F0; padding: 4px 0; border-radius: 0px;">
                         <span style="color: #d9534f;">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span style="color: #0275d8;">토</span>
                     </div>
@@ -1144,7 +1156,7 @@
                 const monthData = await fetchMonthStateList(ymValue);
                 if (!monthData || !Array.isArray(monthData) || monthData.length === 0) {
                     btnContainer.innerHTML = '<div style="grid-column: span 7; font-size: 12px; color: #d9534f; text-align: center; padding: 15px 0;">조회된 날짜 데이터가 없습니다.</div>';
-                    scrollToPanelTop(); return;
+                    return;
                 }
 
                 const curYear = parseInt(ymValue.substring(0, 4), 10);
@@ -1428,7 +1440,6 @@
                 }
                 
                 renderReservationStatusMap();
-                scrollToPanelTop();
 
                 if (firstWorkDateHyphen) {
                     updateAllOptions(firstWorkDateHyphen, false);
@@ -1465,6 +1476,8 @@
             } else {
                 refreshUserReservationsAsync();
             }
+			
+			scrollToPanelTop();
         }
 
         window.addEventListener('load', async () => {

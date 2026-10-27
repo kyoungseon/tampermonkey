@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.8
+// @version     5.1.9
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -331,24 +331,19 @@
     }
 
     if (currentPath === '/fmcs/27') {
-        const rawReferer = urlParams.get('referer');
-        const decodedReferer = rawReferer ? decodeURIComponent(rawReferer) : '';
-        if (decodedReferer.includes('autologin=true') || decodedReferer.includes('/fmcs/102')) {
-            window.addEventListener('load', () => {
-                const userIdInput = document.getElementById('userId');
-                if (userIdInput) {
-                    const rect = userIdInput.getBoundingClientRect();
-                    window.scrollTo({ top: (rect.top + window.pageYOffset) - (window.innerHeight / 2) + (rect.height / 2), behavior: 'instant' });
-                    userIdInput.focus({ preventScroll: true }); userIdInput.click();
-                }
-            });
-        }
+        window.addEventListener('load', () => {
+            const userIdInput = document.getElementById('userId');
+            if (userIdInput) {
+                const rect = userIdInput.getBoundingClientRect();
+                window.scrollTo({ top: (rect.top + window.pageYOffset) - (window.innerHeight / 2) + (rect.height / 2), behavior: 'instant' });
+                userIdInput.focus({ preventScroll: true }); userIdInput.click();
+            }
+        });
     } else if (currentPath === '/fmcs/102') {
 
-        function handleLoginRedirect(isAuto = false) {
+        function handleLoginRedirect() {
             removeAllLocal();
             const currentUrl = new URL(window.location.href);
-            if (isAuto && !currentUrl.searchParams.has('autologin')) currentUrl.searchParams.set('autologin', 'true');
             window.location.href = '/fmcs/27?referer=' + encodeURIComponent(currentUrl.toString());
             return true;
         }
@@ -671,7 +666,7 @@
             return new Promise(async (resolve) => {
                 if (!win.ISLOGIN) {
                     alert('로그인이 필요한 서비스입니다.');
-                    isAutoLink ? handleLoginRedirect(true) : handleLoginRedirect();
+                    handleLoginRedirect();
                     resolve(false);
                     return;
                 }
@@ -1498,19 +1493,18 @@
                 });
             }
 
-            const autologin = urlParams.get('autologin');
             const timeSeq = urlParams.get('time_seq');
             const programCd = urlParams.get('program_cd') || "I000221";
             const resveDateParam = urlParams.get('resve_date');
 
-            if (autologin === 'true') {
-                if (!(await checkTabSessionStatus(true))) {
+            if (resveDateParam && timeSeq) {                
+                if (!win.ISLOGIN) {
                     handleLoginRedirect();
                     return;
                 }
-            }
-            if (resveDateParam && timeSeq) {
-                await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true);
+                if(!await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true)) {
+                    createCustomPanel();
+                }
             } else {
                 createCustomPanel();
             }

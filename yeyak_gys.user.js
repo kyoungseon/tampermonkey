@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.1.7
+// @version     5.1.8
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -348,7 +348,7 @@
         function handleLoginRedirect(isAuto = false) {
             removeAllLocal();
             const currentUrl = new URL(window.location.href);
-            if (isAuto) currentUrl.searchParams.set('autologin', 'true');
+            if (isAuto && !currentUrl.searchParams.has('autologin')) currentUrl.searchParams.set('autologin', 'true');
             window.location.href = '/fmcs/27?referer=' + encodeURIComponent(currentUrl.toString());
             return true;
         }
@@ -1498,14 +1498,20 @@
                 });
             }
 
+            const autologin = urlParams.get('autologin');
             const timeSeq = urlParams.get('time_seq');
             const programCd = urlParams.get('program_cd') || "I000221";
             const resveDateParam = urlParams.get('resve_date');
 
+            if (autologin === 'true') {
+                if (!(await checkTabSessionStatus(true))) {
+                    handleLoginRedirect();
+                    return;
+                }
+            }
             if (resveDateParam && timeSeq) {
-                if (!(await checkTabSessionStatus(false))) { handleLoginRedirect(true); return; }
                 await custom_set_ticket_resve(resveDateParam, timeSeq, programCd, true);
-            } else if (Array.from(urlParams.keys()).length === 0) {
+            } else {
                 createCustomPanel();
             }
         });

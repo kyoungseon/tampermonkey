@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name        고양도시관리공사 성저파크골프장 Quick 예약도우미 V5
 // @namespace   http://tampermonkey.net/
-// @version     5.2.1
+// @version     5.2.2
 // @description 고양도시관리공사 성저파크골프장 예약 페이지에서 예약 현황을 한눈에 확인하고, 빠른 예약/환불을 지원하는 도우미 스크립트입니다.
 // @author      SS2225
 // @match       https://yeyak.gys.or.kr/fmcs/102
@@ -207,6 +207,10 @@
     const parseYMFromDot = (ymDotStr) => ymDotStr ? ymDotStr.replace(/\./g, '') : getCurrentYM();
     const getValidTargetDate = (dateStr) => (dateStr || '').replace(/-/g, '') || getTodayYMD();
 
+    const getMemNo = (v) => {
+        return (win.MEM_NO !== undefined && win.MEM_NO !== null && typeof win.MEM_NO !== 'object' && String(win.MEM_NO).trim() !== '') ? String(win.MEM_NO).trim() : null;
+    };
+
     function loadHtml2Canvas() {
         return new Promise((resolve, reject) => {
             if (win.html2canvas) { resolve(win.html2canvas); return; }
@@ -375,12 +379,7 @@
 
         async function checkTabSessionStatus(isFirstLoad = false) {
             try {
-                let memNo = (win.MEM_NO !== undefined && win.MEM_NO !== null && String(win.MEM_NO).trim() !== '') ? String(win.MEM_NO).trim() : null;
-
-                if (!isFirstLoad && !memNo) {
-                    const responseText = await fetchWithServerTime('/rest/common/memNoSearch?_=' + Date.now(), 'text');
-                    memNo = (responseText && responseText.trim() !== '') ? responseText.trim() : null;
-                }
+                let memNo = getMemNo();
 
                 if (!memNo) {
                     resetLoginState();
@@ -934,7 +933,7 @@
                 document.body.appendChild(panel);
             }
 
-            if (win.ISLOGIN && win.MEM_NO && loadLocalData('gys_local_mem_nm') === loadLocalData('gys_local_env_mem_nm')) {
+            if (win.ISLOGIN && getMemNo() && loadLocalData('gys_local_mem_nm') === loadLocalData('gys_local_env_mem_nm')) {
                 const modalMemNoSpan = document.getElementById('gys-modal-memno');
                 const modalInput = document.getElementById('gys-modal-input-memnm');
                 if (modalMemNoSpan) modalMemNoSpan.textContent = win.MEM_NO;
@@ -1010,7 +1009,7 @@
                         const newName = input.value.trim();
                         if (targetNo && newName) {
                             setCachedMemberName(targetNo, newName);
-                            if (win.MEM_NO && String(win.MEM_NO).trim() === targetNo) {
+                            if (getMemNo() && String(getMemNo()).trim() === targetNo) {
                                 saveLocalData('gys_local_mem_nm', newName);
                                 updateUserNameBtnLabel();
                             }
@@ -1024,7 +1023,7 @@
                         const targetNo = btn.dataset.memno;
                         if (confirm(`회원번호 [${targetNo}] 계정을 목록에서 삭제하시겠습니까?`)) {
                             removeCachedMemberName(targetNo);
-                            if (win.MEM_NO && String(win.MEM_NO).trim() === targetNo) {
+                            if (getMemNo() && String(getMemNo()).trim() === targetNo) {
                                 saveLocalData('gys_local_mem_nm', loadLocalData('gys_local_env_mem_nm'));
                                 updateUserNameBtnLabel();
                             }
